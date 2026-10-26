@@ -1,0 +1,24 @@
+const PORT = 9222;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const res = await fetch(`http://127.0.0.1:${PORT}/json/new?${encodeURIComponent("http://localhost:5173/")}`, { method: "PUT" });
+const target = await res.json();
+const ws = new WebSocket(target.webSocketDebuggerUrl);
+const pending = new Map();
+let nextId = 0;
+const send = (method, params = {}) => new Promise((resolve) => { const id = ++nextId; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id) { pending.get(m.id)?.(m); pending.delete(m.id); } };
+await new Promise((r) => (ws.onopen = r));
+await send("Runtime.enable");
+await sleep(3500);
+const evaluate = async (expression) => {
+  const out = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+  if (out.result?.exceptionDetails) throw new Error(JSON.stringify(out.result.exceptionDetails));
+  return out.result?.result?.value;
+};
+console.log("at rest:", JSON.stringify(await evaluate("window.__survivexTrace")));
+await send("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w", windowsVirtualKeyCode: 87, nativeVirtualKeyCode: 87 });
+await sleep(500);
+console.log("during W:", JSON.stringify(await evaluate("window.__survivexTrace")));
+await send("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyW", key: "w", windowsVirtualKeyCode: 87, nativeVirtualKeyCode: 87 });
+console.log("live group position:", JSON.stringify(await evaluate("({ z: window.__survivexPlayer.position.z, uuid: window.__survivexPlayer.uuid })")));
+ws.close();
