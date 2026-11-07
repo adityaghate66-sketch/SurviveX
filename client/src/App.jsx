@@ -1,14 +1,62 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import Classroom from "./scenes/Classroom.jsx";
 import Player from "./components/Player.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
+import { getHealth, getMissions } from "./services/api.js";
 import "./App.css";
+
+const DEFAULT_MISSION = {
+  code: "001",
+  title: "Know Your Surroundings",
+  description: "Explore the classroom before the emergency begins.",
+  objective: "Explore the environment",
+  mode: "TRAINING",
+};
 
 export default function App() {
   // Shared handle on the player's 3D group so the camera can follow it.
   const playerRef = useRef(null);
+  const [backendStatus, setBackendStatus] = useState({ loading: true });
+  const [mission, setMission] = useState(DEFAULT_MISSION);
+  const [missionSource, setMissionSource] = useState("local");
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([getHealth(), getMissions()])
+      .then(([healthRes, missionsRes]) => {
+        if (!mounted) return;
+
+        if (healthRes.data?.data || healthRes.data?.error) {
+          const payload = healthRes.data?.data ?? healthRes.data?.error?.details ?? {};
+          const dbStatus = payload.database?.status;
+          const healthy = healthRes.ok && healthRes.data?.success;
+          setBackendStatus({
+            loading: false,
+            connected: true,
+            dbStatus,
+            message: healthy
+              ? "API connected"
+              : healthRes.data?.error?.message || payload.status || "API degraded",
+          });
+        } else {
+          setBackendStatus({ loading: false, connected: false, message: "API unreachable" });
+        }
+
+        if (missionsRes.ok && missionsRes.data?.success && Array.isArray(missionsRes.data.data) && missionsRes.data.data.length > 0) {
+          setMission(missionsRes.data.data[0]);
+          setMissionSource("backend");
+        }
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        setBackendStatus({ loading: false, connected: false, message: err.message });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <main className="game">
@@ -38,20 +86,57 @@ export default function App() {
           </div>
         </div>
 
-        <div className="status">
-          <span className="status-dot" />
-          TRAINING MODE
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div className="status">
+            <span className="status-dot" />
+            {(mission.mode || "TRAINING").toUpperCase()} MODE
+          </div>
+          <div
+            className="status"
+            title={backendStatus.message || ''}
+            style={{
+              opacity: backendStatus.loading ? 0.7 : 1,
+              borderColor: backendStatus.loading
+                ? '#999'
+                : !backendStatus.connected
+                  ? '#ef4444'
+                  : backendStatus.dbStatus === 'connected'
+                    ? '#22c55e'
+                    : '#f59e0b',
+            }}
+          >
+            <span
+              className="status-dot"
+              style={{
+                background: backendStatus.loading
+                  ? '#999'
+                  : !backendStatus.connected
+                    ? '#ef4444'
+                    : backendStatus.dbStatus === 'connected'
+                      ? '#22c55e'
+                      : '#f59e0b',
+                boxShadow: 'none',
+              }}
+            />
+            {backendStatus.loading
+              ? 'CONNECTING...'
+              : !backendStatus.connected
+                ? 'BACKEND OFFLINE'
+                : backendStatus.dbStatus === 'connected'
+                  ? 'BACKEND'
+                  : 'API (DB OFF)'}
+          </div>
         </div>
       </header>
 
-      <section className="mission-card">
-        <p className="eyebrow">MISSION 001</p>
-        <h2>Know Your Surroundings</h2>
-        <p>Explore the classroom before the emergency begins.</p>
+      <section className="mission-card" title={missionSource === "backend" ? "Loaded from backend" : "Using local fallback"}>
+        <p className="eyebrow">MISSION {mission.code || "001"}</p>
+        <h2>{mission.title}</h2>
+        <p>{mission.description}</p>
         <div className="mission-progress">
-          <span />
+          <span style={{ width: `${Math.max(0, Math.min(100, Number(mission.progress) || 0)) || 15}%` }} />
         </div>
-        <small>OBJECTIVE: Explore the environment</small>
+        <small>OBJECTIVE: {(mission.objective || "").toUpperCase() || "EXPLORE THE ENVIRONMENT"}</small>
       </section>
 
       <footer className="controls-card">

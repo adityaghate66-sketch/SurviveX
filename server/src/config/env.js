@@ -21,9 +21,16 @@ const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// The database URL is optional at boot: the API must still start and report
+// "degraded" so you can see *why* it is unhealthy instead of a crash loop.
+// Commands that genuinely need it (prisma migrate, any model query) fail with
+// a clear message instead.
+const databaseUrl = process.env.DATABASE_URL?.trim() || undefined;
+
 export const config = Object.freeze({
   nodeEnv,
   isProduction: nodeEnv === "production",
   port,
   corsOrigins,
+  databaseUrl,
 });

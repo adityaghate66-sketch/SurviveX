@@ -1,0 +1,80 @@
+// Prisma schema for SurviveX (Stage 3).
+//
+// Models: User, Mission, GameSession, MissionProgress.
+// Relations: User 1–N GameSession, Mission 1–N GameSession,
+//            GameSession 1–1 MissionProgress (sessionId unique, upsert target).
+//
+// Note on Prisma 7: the connection URL is NOT written here. It lives in
+// prisma.config.js for CLI commands and is passed via PrismaPg adapter in
+// src/config/database.js at runtime.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MissionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum MissionMode {
+  TRAINING
+  SCENARIO
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model User {
+  id        String        @id @default(cuid())
+  username  String        @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  sessions  GameSession[]
+}
+
+model Mission {
+  id          String        @id @default(cuid())
+  code        String        @unique
+  title       String
+  description String
+  objective   String
+  mode        MissionMode   @default(TRAINING)
+  status      MissionStatus @default(ACTIVE)
+  order       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  sessions    GameSession[]
+}
+
+model GameSession {
+  id          String          @id @default(cuid())
+  userId      String
+  missionId   String
+  status      SessionStatus   @default(ACTIVE)
+  startedAt   DateTime        @default(now())
+  completedAt DateTime?
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission     Mission         @relation(fields: [missionId], references: [id], onDelete: Restrict)
+  progress    MissionProgress?
+
+  @@index([userId])
+  @@index([missionId])
+  @@index([status])
+}
+
+model MissionProgress {
+  id           String      @id @default(cuid())
+  sessionId    String      @unique
+  progress     Int         @default(0)
+  visitedZones Json?
+  updatedAt    DateTime    @updatedAt
+  session      GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
