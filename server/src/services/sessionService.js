@@ -10,6 +10,14 @@ import {
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,32}$/;
 const MAX_ID_LENGTH = 128;
 
+// Advisory locks intentionally serialize work on the same user/session
+// (StrictMode mounts an effect twice, players open several tabs, and progress
+// updates can arrive together). Prisma's default 5 s transaction budget is
+// shorter than that queue on a remote database, so waiting requests were
+// failing with P2028. The locks are still short-lived; the larger budget only
+// covers time spent waiting for earlier requests.
+const LOCKED_TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
+
 function requireDb() {
   if (!isDatabaseConfigured()) {
     throw new AppError("DATABASE_URL is not set. Add it to server/.env.", {
@@ -195,7 +203,7 @@ export async function createOrGetSession(rawPayload) {
     });
 
     return { session: created, reused: false };
-  });
+  }, LOCKED_TX_OPTIONS);
 
   return {
     ...presentSession(result.session),
@@ -226,6 +234,11 @@ export async function updateMissionProgress(rawSessionId, rawPayload) {
   const prisma = getPrisma();
 
   return prisma.$transaction(async (tx) => {
+    // Two zones can be reported at once (double click, two tabs). Without a
+    // lock both requests read the same visited list and the slower write
+    // silently drops the other zone.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivex-progress:${sessionId}`}, 0))::text`;
+
     const session = await tx.gameSession.findUnique({
       where: { id: sessionId },
       include: { progress: true },
@@ -284,7 +297,7 @@ export async function updateMissionProgress(rawSessionId, rawPayload) {
       newlyDiscovered: !alreadyDiscovered,
       completed: progress >= 100,
     };
-  });
+  }, LOCKED_TX_OPTIONS);
 }
 
 /**

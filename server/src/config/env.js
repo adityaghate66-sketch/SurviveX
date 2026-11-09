@@ -16,9 +16,14 @@ const nodeEnv = process.env.NODE_ENV ?? "development";
 
 // CORS_ORIGIN can hold several origins separated by commas, which is handy
 // when you add a deployed frontend later.
+//
+// Browsers send `Origin` as a bare scheme://host with no trailing slash, and the
+// cors package compares strings exactly. A value pasted as
+// "https://app.vercel.app/" would therefore reject every real browser request,
+// so trailing slashes are stripped here instead of relying on typo-free env.
 const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 // The database URL is optional at boot: the API must still start and report
