@@ -18,7 +18,7 @@ export function createApp() {
   app.use(
     cors({
       origin: config.corsOrigins,
-      methods: ["GET", "POST", "PATCH", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     })
   );
 
