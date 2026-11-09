@@ -1,4 +1,6 @@
-const API_BASE = '/api';
+// Dev falls back to '/api' (handled by the Vite proxy); production reads the
+// Render URL from VITE_API_BASE_URL, which Vite bakes in at build time.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 async function request(path, options = {}) {
   try {
