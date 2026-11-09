@@ -2,7 +2,14 @@
 // Render URL from VITE_API_BASE_URL, which Vite bakes in at build time.
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
+// A render-blocking request must never hang forever (a cold Render instance can
+// take a while). Timing out surfaces the same "unreachable" path as an outage.
+const REQUEST_TIMEOUT_MS = 12000;
+
 async function request(path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       headers: {
@@ -10,12 +17,19 @@ async function request(path, options = {}) {
         ...(options.headers || {}),
       },
       ...options,
+      signal: controller.signal,
     });
 
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data };
   } catch (error) {
-    return { ok: false, status: 0, error: error.message };
+    return {
+      ok: false,
+      status: 0,
+      error: error.name === 'AbortError' ? 'Request timed out' : error.message,
+    };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

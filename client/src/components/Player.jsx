@@ -22,10 +22,18 @@ const MOVEMENT_CODES = new Set([
 
 const movementVector = new THREE.Vector3();
 
-export default function Player({ bodyRef }) {
+// `active` is false until the backend has confirmed a session, so the player
+// stands still (and cannot trigger discoveries) before the mission starts.
+export default function Player({ bodyRef, active = true }) {
   const internalRef = useRef(null);
   const playerRef = bodyRef ?? internalRef;
   const keys = useRef({});
+  const activeRef = useRef(active);
+
+  useEffect(() => {
+    activeRef.current = active;
+    if (!active) keys.current = {}; // drop keys held when play paused
+  }, [active]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -55,7 +63,7 @@ export default function Player({ bodyRef }) {
 
   useFrame((_, delta) => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player || !activeRef.current) return;
     const pressed = keys.current;
 
     // Note: the values in `pressed` are booleans or `undefined`, never 0/1.

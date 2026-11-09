@@ -12,7 +12,7 @@ import { findZoneAtPosition } from "../game/zoneDetection.js";
  * clears the ref so a later re-entry is reported again. The parent decides
  * whether that re-entry is a duplicate mission-wise.
  */
-export default function ZoneDetector({ targetRef, onDiscover }) {
+export default function ZoneDetector({ targetRef, onDiscover, enabled = true }) {
   const zoneIdRef = useRef(null);
   const onDiscoverRef = useRef(onDiscover);
 
@@ -23,6 +23,13 @@ export default function ZoneDetector({ targetRef, onDiscover }) {
   useFrame(() => {
     const target = targetRef?.current;
     if (!target) return;
+
+    // Before a session exists there is nothing to report: forget the zone the
+    // player is standing in so it is announced once play actually starts.
+    if (!enabled) {
+      zoneIdRef.current = null;
+      return;
+    }
 
     const zone = findZoneAtPosition(target.position);
     const nextZoneId = zone?.id ?? null;
