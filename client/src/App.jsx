@@ -121,6 +121,20 @@ export default function App() {
   const [phase, setPhase] = useState(() => (readStoredSession() ? "restoring" : "idle"));
   const [sessionError, setSessionError] = useState(null);
 
+  // Phase 2A: Disaster state (none | earthquake | aftermath)
+  const [disasterState, setDisasterState] = useState("none");
+
+  // Press 'E' during gameplay to trigger earthquake for testing Phase 2
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === "KeyE" && phase === "playing" && disasterState === "none") {
+        setDisasterState("earthquake");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [phase, disasterState]);
+
   // Persistence plumbing. Refs keep async callbacks from depending on state
   // that may change while a request is in flight.
   const restoredRef = useRef(false);
@@ -541,6 +555,14 @@ export default function App() {
         <span className="scene-label-dot" />
         CLASSROOM · ZONE A
       </div>
+
+      {disasterState === "earthquake" && (
+        <div className="disaster-banner" role="alert">
+          <span className="disaster-eyebrow">EMERGENCY ALERT</span>
+          <strong>EARTHQUAKE DETECTED!</strong>
+          <p>Drop, Cover, and Hold On! Find a safe spot under the student desks.</p>
+        </div>
+      )}
 
       {notification && (
         <div className="zone-toast" role="status" key={notification.token}>
