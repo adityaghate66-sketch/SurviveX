@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { clampToRoom, resolveObstacle } from "../game/collision.js";
-import { ROOM_BOUNDS, EXPLORATION_ZONES } from "../scenes/classroomLayout.js";
+import { ROOM_BOUNDS, EXPLORATION_ZONES, OBSTACLES } from "../scenes/classroomLayout.js";
 import { updateSessionProgress, getSessionProgress } from "../services/api.js";
 
 const MOVE_SPEED = 4; // units per second
