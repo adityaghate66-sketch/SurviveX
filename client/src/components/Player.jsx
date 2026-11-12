@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { clampToRoom, resolveObstacle } from "../game/collision.js";
-import { ROOM_BOUNDS, EXPLORATION_ZONES, OBSTACLES, PLAYER_SPAWN } from "../scenes/classroomLayout.js";
+import { ROOM_BOUNDS, EXPLORATION_ZONES, OBSTACLES, PLAYER_SPAWN, DESKS } from "../scenes/classroomLayout.js";
 import { updateSessionProgress, getSessionProgress } from "../services/api.js";
 
 const MOVE_SPEED = 4; // units per second
@@ -26,11 +26,15 @@ const movementVector = new THREE.Vector3();
 
 // `active` is false until the backend has confirmed a session, so the player
 // stands still (and cannot trigger discoveries) before the mission starts.
-export default function Player({ bodyRef, active = true, sessionId }) {
+export default function Player({ bodyRef, active = true, sessionId, disasterState = "none", onTakeCover }) {
   const internalRef = useRef(null);
   const playerRef = bodyRef ?? internalRef;
   const keys = useRef({});
   const activeRef = useRef(active);
+
+  // Survival state
+  const [isCovered, setIsCovered] = useState(false);
+  const [lastCoverCheck, setLastCoverCheck] = useState(0);
 
   // Zone detection state
   const [lastZoneSubmitted, setLastZoneSubmitted] = useState(null);
@@ -45,7 +49,7 @@ export default function Player({ bodyRef, active = true, sessionId }) {
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (MOVEMENT_CODES.has(event.code)) event.preventDefault();
+      if (MOVEMENT_CODES.has(event.code) || event.code === "KeyC") event.preventDefault();
       keys.current[event.code] = true;
     };
 
@@ -107,6 +111,20 @@ export default function Player({ bodyRef, active = true, sessionId }) {
     }
 
     clampToRoom(player.position, PLAYER_RADIUS, ROOM_BOUNDS);
+
+    // Take cover logic
+    let nearDesk = false;
+    for (const desk of DESKS) {
+      const dx = player.position.x - desk.position[0];
+      const dz = player.position.z - desk.position[2];
+      if (Math.sqrt(dx * dx + dz * dz) < 1.5) {
+        nearDesk = true;
+        break;
+      }
+    }
+
+    const shouldCover = pressed.KeyC && nearDesk;
+    if (shouldCover !== isCovered) setIsCovered(shouldCover);
 
     // Zone entry detection
     const playerPos = player.position;
@@ -171,11 +189,11 @@ export default function Player({ bodyRef, active = true, sessionId }) {
   }, [sessionId]);
 
   return (
-    <group ref={playerRef} position={PLAYER_SPAWN}>
+    <group ref={playerRef} position={PLAYER_SPAWN} scale={isCovered ? [1, 0.6, 1] : [1, 1, 1]}>
       {/* Body */}
-      <mesh position={[0, 1.05, 0]} castShadow>
+      <mesh position={[0, isCovered ? 0.6 : 1.05, 0]} castShadow>
         <capsuleGeometry args={[0.38, 0.8, 4, 8]} />
-        <meshStandardMaterial color="#2563EB" />
+        <meshStandardMaterial color={isCovered ? "#16a34a" : "#2563EB"} />
       </mesh>
 
       {/* Head */}
