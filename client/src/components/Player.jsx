@@ -134,18 +134,20 @@ export default function Player({ bodyRef, active = true, sessionId }) {
             });
 
             // Submit zone discovery to backend
-            ;(async () => {
-              try {
-                const progressResponse = await updateSessionProgress(sessionId, zone.id);
-                if (progressResponse.ok && progressResponse.data?.newlyDiscovered) {
-                  // Progress updated successfully on server
-                  // The UI will be refreshed via the progress getter
-                  setZoneNotification(prev => prev && prev.zoneId !== zone.id ? null : { zoneId: zone.id, zoneLabel: zone.label, newlyDiscovered: true });
+            if (sessionId) {
+              ;(async () => {
+                try {
+                  const progressResponse = await updateSessionProgress(sessionId, zone.id);
+                  if (progressResponse.ok && progressResponse.data?.newlyDiscovered) {
+                    // Progress updated successfully on server
+                    // The UI will be refreshed via the progress getter
+                    setZoneNotification(prev => prev && prev.zoneId !== zone.id ? null : { zoneId: zone.id, zoneLabel: zone.label, newlyDiscovered: true });
+                  }
+                } catch (err) {
+                  console.error("Failed to update zone progress:", err);
                 }
-              } catch (err) {
-                console.error("Failed to update zone progress:", err);
-              }
-            })();
+              })();
+            }
           }
         }
       }
