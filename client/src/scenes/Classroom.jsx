@@ -161,17 +161,27 @@ export default function Classroom() {
         <Desk key={desk.id} position={desk.position} />
       ))}
 
-      {/* Ceiling lights */}
-      {[-4, 0, 4].map((x) => (
-        <mesh key={x} position={[x, 6.7, -2]}>
-          <boxGeometry args={[2, 0.08, 0.6]} />
-          <meshStandardMaterial
-            color="#FFFFFF"
-            emissive="#FFF2CC"
-            emissiveIntensity={1.2}
-          />
-        </mesh>
-      ))}
+      {/* Hallway Floor */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -0.01, halfDepth + ROOM.hallwayDepth / 2]}
+        receiveShadow
+      >
+        <planeGeometry args={[ROOM.width, ROOM.hallwayDepth]} />
+        <meshStandardMaterial color="#D9D4C7" roughness={0.9} />
+      </mesh>
+
+      {/* Hallway Left wall */}
+      <mesh position={[-halfWidth, ROOM.height / 2, halfDepth + ROOM.hallwayDepth / 2]} receiveShadow>
+        <boxGeometry args={[0.25, ROOM.height, ROOM.hallwayDepth]} />
+        <meshStandardMaterial color="#D4E0E5" />
+      </mesh>
+
+      {/* Hallway Right wall */}
+      <mesh position={[halfWidth, ROOM.height / 2, halfDepth + ROOM.hallwayDepth / 2]} receiveShadow>
+        <boxGeometry args={[0.25, ROOM.height, ROOM.hallwayDepth]} />
+        <meshStandardMaterial color="#D4E0E5" />
+      </mesh>
     </>
   );
 }

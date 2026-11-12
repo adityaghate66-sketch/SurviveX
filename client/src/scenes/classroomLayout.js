@@ -6,16 +6,17 @@
 
 export const ROOM = {
   width: 18, // x axis
-  depth: 16, // z axis
+  depth: 16, // z axis (Classroom)
   height: 7, // y axis
+  hallwayDepth: 20, // extension into the hallway
 };
 
-// Inner face of each wall. The player is kept inside these numbers.
+// Updated bounds to allow walking into the hallway through the front "door" area
 export const ROOM_BOUNDS = {
-  minX: -(ROOM.width / 2) + 0.125, // left wall inner face
-  maxX: ROOM.width / 2 - 0.125, // right wall inner face
-  minZ: -(ROOM.depth / 2) + 0.125, // back wall inner face
-  maxZ: ROOM.depth / 2 - 0.125, // front of the room (open side)
+  minX: -(ROOM.width / 2) + 0.125,
+  maxX: ROOM.width / 2 - 0.125,
+  minZ: -(ROOM.depth / 2) + 0.125,
+  maxZ: ROOM.depth / 2 + ROOM.hallwayDepth, // Expanded for the hallway
 };
 
 // Layout of the 3x3 grid of student desks.
