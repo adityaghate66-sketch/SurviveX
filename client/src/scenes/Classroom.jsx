@@ -84,7 +84,7 @@ function Window({ position }) {
   );
 }
 
-export default function Classroom() {
+export default function Classroom({ activeProp = null } = {}) {
   const halfWidth = ROOM.width / 2;
   const halfDepth = ROOM.depth / 2;
 
@@ -157,18 +157,27 @@ export default function Classroom() {
       <Window position={[-halfWidth + 0.18, 3.5, 4.5]} />
 
       {/* Emergency Props (e.g. Fire Extinguishers) */}
-      {EMERGENCY_PROPS.map((prop) => (
-        <group key={prop.id} position={prop.position}>
-          <mesh castShadow>
-            <cylinderGeometry args={[0.2, 0.2, 0.9, 16]} />
-            <meshStandardMaterial color="#dc2626" roughness={0.3} />
-          </mesh>
-          <mesh position={[0, 0.5, 0]}>
-            <cylinderGeometry args={[0.08, 0.2, 0.2, 16]} />
-            <meshStandardMaterial color="#1e293b" />
-          </mesh>
-        </group>
-      ))}
+      {EMERGENCY_PROPS.map((prop) => {
+        const isActive = prop.id === activeProp?.id;
+        return (
+          <group key={prop.id} position={prop.position}>
+            <mesh castShadow emissive={isActive ? "#4ade80" : "#000000"} emissiveIntensity={isActive ? 0.3 : 0}>
+              <cylinderGeometry args={[isActive ? 0.22 : 0.2, isActive ? 0.22 : 0.2, isActive ? 0.95 : 0.9, 16]} />
+              <meshStandardMaterial color={isActive ? "#22c55e" : "#dc2626"} roughness={isActive ? 0.2 : 0.3} />
+            </mesh>
+            <mesh position={[0, isActive ? 0.55 : 0.5, 0]}>
+              <cylinderGeometry args={[isActive ? 0.1, isActive ? 0.22 : 0.2, isActive ? 0.25 : 0.2, 16]} />
+              <meshStandardMaterial color="#1e293b" />
+            </mesh>
+            {isActive && (
+              <mesh position={[0.6, 0, 0]}>
+                <planeGeometry args={[1.2, 0.25]} />
+                <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
 
       {/* Hallway Floor */}
       <mesh

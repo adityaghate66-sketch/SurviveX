@@ -108,6 +108,7 @@ export default function App() {
   // the UI is derived from this list, never stored separately.
   const [visitedZones, setVisitedZones] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [activeProp, setActiveProp] = useState(null);
 
   const [backendStatus, setBackendStatus] = useState({ loading: true });
   const [mission, setMission] = useState(DEFAULT_MISSION);
@@ -385,8 +386,8 @@ export default function App() {
       >
         <color attach="background" args={["#A9C9DC"]} />
 
-        <Classroom />
-        <Player bodyRef={playerRef} active={phase === "playing"} sessionId={sessionIdRef.current} />
+        <Classroom activeProp={activeProp} />
+        <Player bodyRef={playerRef} active={phase === "playing"} sessionId={sessionIdRef.current} activeProp={activeProp} />
         <FollowCamera targetRef={playerRef} disasterState={disasterState} />
         <ZoneDetector
           targetRef={playerRef}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { clampToRoom, resolveObstacle } from "../game/collision.js";
-import { ROOM_BOUNDS, EXPLORATION_ZONES, OBSTACLES, PLAYER_SPAWN, DESKS } from "../scenes/classroomLayout.js";
+import { ROOM_BOUNDS, EXPLORATION_ZONES, OBSTACLES, PLAYER_SPAWN, DESKS, EMERGENCY_PROPS } from "../scenes/classroomLayout.js";
 import { updateSessionProgress, getSessionProgress } from "../services/api.js";
 
 const MOVE_SPEED = 4; // units per second
@@ -35,6 +35,7 @@ export default function Player({ bodyRef, active = true, sessionId, disasterStat
   // Survival state
   const [isCovered, setIsCovered] = useState(false);
   const [lastCoverCheck, setLastCoverCheck] = useState(0);
+  const [activeProp, setActiveProp] = useState(null);
 
   // Zone detection state
   const [lastZoneSubmitted, setLastZoneSubmitted] = useState(null);
@@ -125,6 +126,23 @@ export default function Player({ bodyRef, active = true, sessionId, disasterStat
 
     const shouldCover = pressed.KeyC && nearDesk;
     if (shouldCover !== isCovered) setIsCovered(shouldCover);
+
+    // Emergency prop interaction (Press F to use)
+    let currentActiveProp = null;
+    for (const prop of EMERGENCY_PROPS) {
+      const dx = player.position.x - prop.position[0];
+      const dz = player.position.z - prop.position[2];
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 1.8) {
+        currentActiveProp = prop;
+        if (pressed.KeyF) {
+          setActiveProp(prop);
+          console.log(`Picked up: ${prop.label}`);
+        }
+        break;
+      }
+    }
+    if (!currentActiveProp && activeProp) setActiveProp(null);
 
     // Zone entry detection
     const playerPos = player.position;
