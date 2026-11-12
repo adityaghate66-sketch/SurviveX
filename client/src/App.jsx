@@ -4,6 +4,7 @@ import Classroom from "./scenes/Classroom.jsx";
 import Player from "./components/Player.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import ZoneDetector from "./components/ZoneDetector.jsx";
+import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
 import {
   getMissionSummary,
   mergeVisitedZones,
