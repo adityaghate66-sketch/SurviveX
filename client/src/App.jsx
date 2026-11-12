@@ -4,7 +4,6 @@ import Classroom from "./scenes/Classroom.jsx";
 import Player from "./components/Player.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import ZoneDetector from "./components/ZoneDetector.jsx";
-import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
 import {
   getMissionSummary,
   mergeVisitedZones,
@@ -377,7 +376,7 @@ export default function App() {
         shadows
         camera={{
           // Starts behind the player; FollowCamera takes over on the first frame.
-          position: [PLAYER_SPAWN[0], 8, PLAYER_SPAWN[2] + 10.5],
+          position: [-1.6, 8, 6.9 + 10.5],
           fov: 50,
           near: 0.1,
           far: 100,
