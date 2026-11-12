@@ -79,3 +79,40 @@ export const OBSTACLES = [
 // Where the player spawns: front of the room, in the aisle between the two
 // left-hand desk columns so walking forward has clear space.
 export const PLAYER_SPAWN = [-1.6, 0, 6.9];
+
+// Five exploration zones mapped from backend zone IDs.
+// These spherical detection boundaries are positioned to cover meaningful
+// classroom locations without interfering with existing collision detection
+// or the player's natural movement path.
+export const EXPLORATION_ZONES = [
+  {
+    id: "classroom-entrance",
+    center: [0, 1, 7.8],
+    radius: 2.0,
+    label: "Classroom Entrance",
+  },
+  {
+    id: "windows",
+    center: [-8.5, 2.5, 0],
+    radius: 2.0,
+    label: "Window Area",
+  },
+  {
+    id: "student-desks",
+    center: [0, 1, -1.5],
+    radius: 3.0,
+    label: "Student Desk Area",
+  },
+  {
+    id: "teacher-desk",
+    center: [0, 1, -5.5],
+    radius: 2.0,
+    label: "Teacher's Desk",
+  },
+  {
+    id: "open-safe-area",
+    center: [5.5, 1, 6.5],
+    radius: 2.0,
+    label: "Open Safe Area",
+  },
+];

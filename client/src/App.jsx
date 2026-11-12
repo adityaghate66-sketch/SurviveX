@@ -372,7 +372,7 @@ export default function App() {
         <color attach="background" args={["#A9C9DC"]} />
 
         <Classroom />
-        <Player bodyRef={playerRef} active={phase === "playing"} />
+        <Player bodyRef={playerRef} active={phase === "playing"} sessionId={sessionIdRef.current} />
         <FollowCamera targetRef={playerRef} />
         <ZoneDetector
           targetRef={playerRef}

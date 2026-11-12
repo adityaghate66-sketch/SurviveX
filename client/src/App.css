@@ -463,3 +463,40 @@ kbd {
     top: 78px;
   }
 }
+
+.zone-toast {
+  position: absolute;
+  bottom: 30px;
+  right: 30px;
+  padding: 16px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background: rgba(20, 40, 60, 0.9);
+  color: #fff;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: slideInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  z-index: 100;
+}
+
+@keyframes slideInUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.zone-toast-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: #2a9872;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.zone-toast strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
