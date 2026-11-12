@@ -81,13 +81,19 @@ export const OBSTACLES = [
 // left-hand desk columns so walking forward has clear space.
 export const PLAYER_SPAWN = [-1.6, 0, 6.9];
 
-// Five exploration zones mapped from backend zone IDs.
-// These spherical detection boundaries are positioned to cover meaningful
-// classroom locations without interfering with existing collision detection
-// or the player's natural movement path.
+// Interactive items
+export const EMERGENCY_PROPS = [
+  {
+    id: "extinguisher-1",
+    position: [8.5, 0.5, 15],
+    type: "fire-extinguisher",
+    label: "Fire Extinguisher",
+  },
+];
+
+// Exploration zones for Phase 1 mission
 export const EXPLORATION_ZONES = [
   {
-    id: "classroom-entrance",
     center: [0, 1, 7.8],
     radius: 2.0,
     label: "Classroom Entrance",

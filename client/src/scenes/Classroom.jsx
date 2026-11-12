@@ -1,4 +1,4 @@
-import { DESKS, ROOM, TEACHER_DESK } from "./classroomLayout.js";
+import { DESKS, ROOM, TEACHER_DESK, EMERGENCY_PROPS } from "./classroomLayout.js";
 
 // Tabletop sits at y = 1.05 with 0.14 thickness, so the legs run from the floor
 // (0) up to 0.98 — flush under the tabletop instead of poking through it.
@@ -156,9 +156,18 @@ export default function Classroom() {
       <Window position={[-halfWidth + 0.18, 3.5, 0]} />
       <Window position={[-halfWidth + 0.18, 3.5, 4.5]} />
 
-      {/* Student desks */}
-      {DESKS.map((desk) => (
-        <Desk key={desk.id} position={desk.position} />
+      {/* Emergency Props (e.g. Fire Extinguishers) */}
+      {EMERGENCY_PROPS.map((prop) => (
+        <group key={prop.id} position={prop.position}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.2, 0.2, 0.9, 16]} />
+            <meshStandardMaterial color="#dc2626" roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.5, 0]}>
+            <cylinderGeometry args={[0.08, 0.2, 0.2, 16]} />
+            <meshStandardMaterial color="#1e293b" />
+          </mesh>
+        </group>
       ))}
 
       {/* Hallway Floor */}
