@@ -387,7 +387,7 @@ export default function App() {
 
         <Classroom />
         <Player bodyRef={playerRef} active={phase === "playing"} sessionId={sessionIdRef.current} />
-        <FollowCamera targetRef={playerRef} />
+        <FollowCamera targetRef={playerRef} disasterState={disasterState} />
         <ZoneDetector
           targetRef={playerRef}
           enabled={phase === "playing"}

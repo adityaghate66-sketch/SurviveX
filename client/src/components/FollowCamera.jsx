@@ -19,12 +19,12 @@ const FOLLOW_SPEED = 6;
  * uses `1 - Math.exp(-speed * delta)` so the motion feels the same at 60fps and
  * 144fps.
  */
-export default function FollowCamera({ targetRef }) {
+export default function FollowCamera({ targetRef, disasterState = "none" }) {
   const { camera } = useThree();
   const desiredPosition = useRef(new THREE.Vector3());
   const lookAtTarget = useRef(new THREE.Vector3());
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const target = targetRef.current;
     if (!target) return;
 
@@ -38,6 +38,14 @@ export default function FollowCamera({ targetRef }) {
       desiredPosition.current,
       1 - Math.exp(-FOLLOW_SPEED * delta)
     );
+
+    // Apply camera shake if earthquake is active
+    if (disasterState === "earthquake") {
+      const shakeIntensity = 0.25;
+      camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+      camera.position.y += (Math.random() - 0.5) * shakeIntensity;
+      camera.position.z += (Math.random() - 0.5) * shakeIntensity;
+    }
 
     lookAtTarget.current.set(
       target.position.x,
