@@ -166,7 +166,7 @@ export default function Classroom({ activeProp = null } = {}) {
               <meshStandardMaterial color={isActive ? "#22c55e" : "#dc2626"} roughness={isActive ? 0.2 : 0.3} />
             </mesh>
             <mesh position={[0, isActive ? 0.55 : 0.5, 0]}>
-              <cylinderGeometry args={[isActive ? 0.1, isActive ? 0.22 : 0.2, isActive ? 0.25 : 0.2, 16]} />
+              <cylinderGeometry args={[isActive ? 0.1 : 0.1, isActive ? 0.22 : 0.2, isActive ? 0.25 : 0.2, 16]} />
               <meshStandardMaterial color="#1e293b" />
             </mesh>
             {isActive && (
