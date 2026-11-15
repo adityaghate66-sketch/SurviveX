@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import Classroom from "./scenes/Classroom.jsx";
 import Player from "./components/Player.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import ZoneDetector from "./components/ZoneDetector.jsx";
+import ActionPrompt from "./components/ActionPrompt.jsx";
+import { hazardsRegistry } from "./game/hazards.js";
 import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
 import {
   getMissionSummary,
@@ -124,6 +126,42 @@ export default function App() {
 
   // Phase 2A: Disaster state (none | earthquake | aftermath)
   const [disasterState, setDisasterState] = useState("none");
+
+  // HUD state for hazards and action prompts
+  const [hazardState, setHazardState] = useState({
+    activeHazard: null,
+    actionPrompt: null
+  });
+
+  // Proximity check for fires and action prompts
+  const checkProximityToHazards = useCallback(() => {
+    if (!playerRef.current || phase !== "playing") return;
+
+    const playerPos = playerRef.current.position;
+    const activeHazards = hazardsRegistry.getAllActiveHazards();
+
+    // Check for hazards within interaction range
+    for (const hazard of activeHazards) {
+      const distance = Math.sqrt(
+        Math.pow(playerPos.x - hazard.position.x, 2) +
+        Math.pow(playerPos.z - hazard.position.z, 2)
+      );
+
+      if (distance < 2.5) {
+        setHazardState(prev => ({
+          ...prev,
+          activeHazard: hazard,
+          actionPrompt: hazard.intensity > 0
+            ? { text: "Press [F] to Extinguish Fire", position: hazard.position, color: "#ea580c" }
+            : null
+        }));
+        return;
+      }
+    }
+
+    // No hazard nearby
+    setHazardState(prev => ({ ...prev, activeHazard: null, actionPrompt: null }));
+  }, [phase]);
 
   // Press 'E' during gameplay to trigger earthquake for testing Phase 2
   useEffect(() => {
@@ -372,6 +410,33 @@ export default function App() {
     };
   }, []);
 
+  // Frame loop: update hazards, check proximity, handle F key interaction
+  useFrame(() => {
+    // Always update hazards physics
+    hazardsRegistry.update(0.016); // ~60fps fixed dt
+
+    // Check proximity to hazards when playing
+    checkProximityToHazards();
+
+    // Handle fire extinguisher interaction (F key)
+    if (phase === "playing" && activeProp?.id) {
+      if (hazardState.activeHazard &&
+          activeProp.id === hazardState.activeHazard.id) {
+        // Player has extinguisher and is near active fire
+        const extinguishResult = hazardState.activeHazard.extinguish(0.5);
+        if (!extinguishResult) {
+          hazardsRegistry.particleSystem.emit(hazardState.activeHazard.position, 5);
+        } else {
+          setHazardState(prev => ({
+            ...prev,
+            activeHazard: null,
+            actionPrompt: null
+          }));
+        }
+      }
+    }
+  });
+
   return (
     <main className="game">
       <Canvas
@@ -394,6 +459,14 @@ export default function App() {
           enabled={phase === "playing"}
           onDiscover={handleZoneDiscover}
         />
+        {hazardState.actionPrompt && (
+          <ActionPrompt
+            visible
+            text={hazardState.actionPrompt.text}
+            position={hazardState.actionPrompt.position}
+            color={hazardState.actionPrompt.color}
+          />
+        )}
       </Canvas>
 
       <header className="game-header">
