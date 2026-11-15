@@ -1,8 +1,25 @@
 import { createApp } from "./app.js";
 import { config } from "./config/env.js";
 import { disconnectDatabase } from "./config/database.js";
+// import { Server } from "colyseus";
+// import { monitor } from "@colyseus/monitor";
 
 const app = createApp();
+
+// TODO: Uncomment when colyseus is installed
+// const gameServer = new Server({
+//   server,
+//   // WebSocket path for Colyseus
+// })
+//
+// // Register rooms
+// gameServer.define("game_room", GameRoom)
+//   .enableRealtimeListing()
+//   .waitForClient(10000);
+//
+// // Monitoring endpoint (for development)
+// app.use("/colyseus", monitor());
+
 const server = app.listen(config.port, () => {
   console.log(`[survivex-api] listening on http://localhost:${config.port}`);
   console.log(`[survivex-api] environment: ${config.nodeEnv}`);

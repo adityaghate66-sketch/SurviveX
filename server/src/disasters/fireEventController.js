@@ -1,8 +1,6 @@
 // Server-side fire event controller
 // Coordinates fire outbreaks across multiplayer sessions
 
-import { hazardsRegistry } from "../../../client/src/game/hazards.js";
-
 /**
  * Fire Event Controller
  * Manages server-side fire outbreak events for disaster simulation
@@ -12,6 +10,17 @@ export class FireEventController {
     this.activeFires = new Map();
     this.cooldown = 300; // seconds before new fire can start
     this.lastEvent = null;
+    this.room = null;
+  }
+
+  // Set the room reference for broadcasting
+  setRoom(room) {
+    this.room = room;
+  }
+
+  // Clear all fires (on room dispose)
+  clear() {
+    this.activeFires.clear();
   }
 
   // Start a fire at specified location
@@ -63,7 +72,9 @@ export class FireEventController {
 
   // Broadcast event to all clients in room
   broadcastEvent(roomId, event) {
-    // TODO: Implement Colyseus room.broadcast() when multiplayer is integrated
+    if (this.room && this.room.broadcast) {
+      this.room.broadcast("disasterEvent", event);
+    }
     console.log(`[FireEvent] Broadcasting to room ${roomId}:`, event);
   }
 
