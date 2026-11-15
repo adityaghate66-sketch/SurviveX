@@ -1,4 +1,8 @@
 import { DESKS, ROOM, TEACHER_DESK, EMERGENCY_PROPS } from "./classroomLayout.js";
+import { useEffect, useState } from "react";
+import * as THREE from "three";
+import { hazardsRegistry } from "../game/hazards.js";
+import { SmokeCloud } from "../components/ParticleSystem.jsx";
 
 // Tabletop sits at y = 1.05 with 0.14 thickness, so the legs run from the floor
 // (0) up to 0.98 — flush under the tabletop instead of poking through it.
@@ -87,6 +91,25 @@ function Window({ position }) {
 export default function Classroom({ activeProp = null } = {}) {
   const halfWidth = ROOM.width / 2;
   const halfDepth = ROOM.depth / 2;
+  const [fireHazard, setFireHazard] = useState(null);
+
+  // Initialize fire hazard when component mounts
+  useEffect(() => {
+    // Create fire hazard in hallway area
+    const extinguisher = EMERGENCY_PROPS.find(prop => prop.type === "fire-extinguisher");
+    if (extinguisher && !hazardsRegistry.getHazard("fire-hallway")) {
+      const position = new THREE.Vector3(
+        extinguisher.position[0],
+        extinguisher.position[1],
+        extinguisher.position[2]
+      );
+      const hazard = hazardsRegistry.addHazard("fire-hallway", position, {
+        maxSpreadZones: 2,
+        baseIntensity: 0.8
+      });
+      setFireHazard(hazard);
+    }
+  }, []);
 
   return (
     <>
@@ -200,6 +223,11 @@ export default function Classroom({ activeProp = null } = {}) {
         <boxGeometry args={[0.25, ROOM.height, ROOM.hallwayDepth]} />
         <meshStandardMaterial color="#D4E0E5" />
       </mesh>
+
+      {/* Fire hazard in hallway - emits smoke when active */}
+      {fireHazard && (
+        <SmokeCloud hazard={fireHazard} />
+      )}
     </>
   );
 }
