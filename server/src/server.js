@@ -1,29 +1,48 @@
 import { createApp } from "./app.js";
 import { config } from "./config/env.js";
 import { disconnectDatabase } from "./config/database.js";
-// import { Server } from "colyseus";
-// import { monitor } from "@colyseus/monitor";
+import { Server, matchMaker } from "colyseus";
+import { monitor } from "@colyseus/monitor";
+import { GameRoom } from "./multiplayer/gameRoom.js";
+import http from "http";
+
+// Colyseus 0.18 installs one CORS listener on the shared HTTP server that runs
+// for *every* request (including /api), and by default reflects any Origin.
+// Narrow it to the same allow-list the Express app uses so the two stay in sync.
+matchMaker.controller.getCorsHeaders = (headers) => {
+  const origin = headers.get("origin");
+  const allowed = !origin || config.corsOrigins.includes(origin);
+  // An empty value overrides Colyseus' permissive `*` default and makes the
+  // browser reject the response for origins outside the allow-list.
+  return {
+    "Access-Control-Allow-Origin": allowed ? origin || "*" : "",
+  };
+};
 
 const app = createApp();
 
-// TODO: Uncomment when colyseus is installed
-// const gameServer = new Server({
-//   server,
-//   // WebSocket path for Colyseus
-// })
-//
-// // Register rooms
-// gameServer.define("game_room", GameRoom)
-//   .enableRealtimeListing()
-//   .waitForClient(10000);
-//
-// // Monitoring endpoint (for development)
-// app.use("/colyseus", monitor());
+// Create HTTP server first
+const server = http.createServer(app);
 
-const server = app.listen(config.port, () => {
+// Create Colyseus server on the same HTTP server.
+// Colyseus 0.18 handles matchmaking CORS itself (it echoes the request origin),
+// so the `cors` option is no longer needed here.
+const gameServer = new Server({ server });
+
+// Register rooms
+gameServer.define("game_room", GameRoom);
+
+// Monitoring endpoint (for development)
+app.use("/colyseus", monitor());
+
+// Start through gameServer.listen() (not server.listen()): this is what binds
+// Colyseus' /matchmake/* routes onto the HTTP server. Requests for any other
+// path still fall through to the Express app (/api, /colyseus).
+gameServer.listen(config.port, () => {
   console.log(`[survivex-api] listening on http://localhost:${config.port}`);
   console.log(`[survivex-api] environment: ${config.nodeEnv}`);
   console.log(`[survivex-api] allowed origins: ${config.corsOrigins.join(", ")}`);
+  console.log(`[survivex-api] Colyseus WebSocket ready`);
 });
 
 // nodemon sends SIGUSR2 on restart; Ctrl+C sends SIGINT. Closing the server

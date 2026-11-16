@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import Classroom from "./scenes/Classroom.jsx";
 import Player from "./components/Player.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import ZoneDetector from "./components/ZoneDetector.jsx";
 import ActionPrompt from "./components/ActionPrompt.jsx";
+import WorldUpdater from "./components/WorldUpdater.jsx";
 import { hazardsRegistry } from "./game/hazards.js";
 import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
+import { multiplayerClient } from "./services/multiplayer.js";
 import {
   getMissionSummary,
   mergeVisitedZones,
@@ -173,6 +175,32 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [phase, disasterState]);
+
+  // Join the Colyseus room once a session is confirmed. The game stays fully
+  // playable in local mode if the multiplayer server is unavailable.
+  useEffect(() => {
+    if (phase !== "playing") return undefined;
+
+    let cancelled = false;
+    (async () => {
+      const initialized = await multiplayerClient.initialize();
+      if (!initialized || cancelled) return;
+
+      const room = await multiplayerClient.joinRoom(sessionIdRef.current, {
+        name: getPlayerName(),
+        spawnX: PLAYER_SPAWN[0],
+        spawnZ: PLAYER_SPAWN[2],
+      });
+      if (!cancelled && room) {
+        console.log(`[Multiplayer] Joined room ${room.roomId ?? room.id}`);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      multiplayerClient.leave();
+    };
+  }, [phase]);
 
   // Persistence plumbing. Refs keep async callbacks from depending on state
   // that may change while a request is in flight.
@@ -410,32 +438,8 @@ export default function App() {
     };
   }, []);
 
-  // Frame loop: update hazards, check proximity, handle F key interaction
-  useFrame(() => {
-    // Always update hazards physics
-    hazardsRegistry.update(0.016); // ~60fps fixed dt
-
-    // Check proximity to hazards when playing
-    checkProximityToHazards();
-
-    // Handle fire extinguisher interaction (F key)
-    if (phase === "playing" && activeProp?.id) {
-      if (hazardState.activeHazard &&
-          activeProp.id === hazardState.activeHazard.id) {
-        // Player has extinguisher and is near active fire
-        const extinguishResult = hazardState.activeHazard.extinguish(0.5);
-        if (!extinguishResult) {
-          hazardsRegistry.particleSystem.emit(hazardState.activeHazard.position, 5);
-        } else {
-          setHazardState(prev => ({
-            ...prev,
-            activeHazard: null,
-            actionPrompt: null
-          }));
-        }
-      }
-    }
-  });
+  // Frame-loop work lives in WorldUpdater (inside the Canvas), where useFrame
+  // has an R3F context. Calling it here in App would throw.
 
   return (
     <main className="game">
@@ -443,7 +447,7 @@ export default function App() {
         shadows
         camera={{
           // Starts behind the player; FollowCamera takes over on the first frame.
-          position: [-1.6, 8, 6.9 + 10.5],
+          position: [PLAYER_SPAWN[0], 8, PLAYER_SPAWN[2] + 10.5],
           fov: 50,
           near: 0.1,
           far: 100,
@@ -452,7 +456,15 @@ export default function App() {
         <color attach="background" args={["#A9C9DC"]} />
 
         <Classroom activeProp={activeProp} />
-        <Player bodyRef={playerRef} active={phase === "playing"} sessionId={sessionIdRef.current} activeProp={activeProp} />
+        <Player
+          bodyRef={playerRef}
+          active={phase === "playing"}
+          activeProp={activeProp}
+          setActiveProp={setActiveProp}
+          onPositionUpdate={(pos) =>
+            multiplayerClient.sendMove(pos.x, pos.y, pos.z, pos.rotY)
+          }
+        />
         <FollowCamera targetRef={playerRef} disasterState={disasterState} />
         <ZoneDetector
           targetRef={playerRef}
@@ -467,6 +479,11 @@ export default function App() {
             color={hazardState.actionPrompt.color}
           />
         )}
+        <WorldUpdater
+          activeProp={activeProp}
+          hazardState={hazardState}
+          checkProximityToHazards={checkProximityToHazards}
+        />
       </Canvas>
 
       <header className="game-header">

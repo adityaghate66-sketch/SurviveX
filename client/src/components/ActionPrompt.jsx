@@ -12,10 +12,13 @@ export default function ActionPrompt({
   const meshRef = useRef();
   const materialRef = useRef();
 
+  // `position` may be a THREE.Vector3 (from hazards) or a plain [x, y, z] tuple.
+  const baseY = Array.isArray(position) ? position[1] : (position?.y ?? 0);
+
   useFrame(({ clock }) => {
     // Gentle floating animation
     if (meshRef.current) {
-      meshRef.current.position.y = position[1] + Math.sin(clock.getElapsedTime() * 1.5) * 0.05;
+      meshRef.current.position.y = baseY + Math.sin(clock.getElapsedTime() * 1.5) * 0.05;
     }
     if (materialRef.current) {
       materialRef.current.opacity = visible ? 0.9 : 0;
@@ -25,7 +28,7 @@ export default function ActionPrompt({
   if (!visible) return null;
 
   return (
-    <group position={position}>
+    <group position={position} name={text || undefined}>
       {/* Background panel */}
       <mesh>
         <planeGeometry args={[2.8, 0.6]} />
@@ -48,7 +51,7 @@ export default function ActionPrompt({
         />
       </mesh>
 
-      {/* Text placeholder (would use troo3d text or canvas texture in production) */}
+      {/* Text placeholder (would use troika3d text or canvas texture in production) */}
       <mesh position={[0, 0, 0.02]}>
         <planeGeometry args={[2.6, 0.4]} />
         <meshBasicMaterial

@@ -1,7 +1,7 @@
 // Game Room for Colyseus - manages shared world state
-import { Room, Client } from "colyseus";
+import { Room } from "colyseus";
 import { SessionState, Player } from "./playerSchema.js";
-import { disasterController } from "../disasters/disasterServer.js";
+import { disasterServer } from "../disasters/disasterServer.js";
 
 export class GameRoom extends Room {
   onCreate(options) {
@@ -13,7 +13,7 @@ export class GameRoom extends Room {
     this.state.maxClients = options.maxClients || 10;
 
     // Setup disaster system
-    disasterController.setRoom(this);
+    disasterServer.setRoom(this);
 
     console.log(`[GameRoom] Created room ${this.state.sessionId}`);
   }
@@ -49,7 +49,7 @@ export class GameRoom extends Room {
 
   onDispose() {
     console.log(`[GameRoom] Room ${this.state.sessionId} disposed`);
-    disasterController.clear();
+    disasterServer.clear();
   }
 
   // Handle player position updates
@@ -71,11 +71,11 @@ export class GameRoom extends Room {
         break;
 
       case "disasterTrigger":
-        disasterController.triggerFromClient(message.disasterType);
+        disasterServer.triggerFromClient(message.disasterType);
         break;
 
       case "extinguishFire":
-        disasterController.extinguishFire(message.fireId);
+        disasterServer.extinguishFire(message.fireId);
         break;
 
       case "takeCover":

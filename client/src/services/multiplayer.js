@@ -1,16 +1,33 @@
 // Multiplayer client service using Colyseus
-import { Client } from "colyseus.js";
+// Gracefully falls back when client is not available (build mode or SSR)
 
-const ENDPOINT = "ws://localhost:4000";
+const IsBrowser = typeof window !== "undefined";
 
 class MultiplayerClient {
   constructor() {
-    this.client = new Client(ENDPOINT);
+    this.client = null;
     this.room = null;
     this.onStateChange = null;
   }
 
+  async initialize() {
+    if (!IsBrowser) return false;
+
+    try {
+      // Must match the server's Colyseus 0.18 protocol (@colyseus/sdk).
+      const { Client } = await import("@colyseus/sdk");
+      this.Client = Client;
+      this.client = new Client(import.meta.env.VITE_WS_URL || "ws://localhost:4000");
+      return true;
+    } catch {
+      console.warn("[Multiplayer] Colyseus SDK not available, using local mode");
+      return false;
+    }
+  }
+
   async joinRoom(sessionId, { name, spawnX, spawnZ }) {
+    if (!this.Client || !this.client) return null;
+
     try {
       this.room = await this.client.joinOrCreate("game_room", {
         sessionId,
@@ -19,7 +36,7 @@ class MultiplayerClient {
         spawnZ
       });
 
-      console.log(`[Multiplayer] Joined room ${this.room.id}`);
+      console.log(`[Multiplayer] Joined room ${this.room.roomId ?? this.room.id}`);
       this.setupRoomListeners();
       return this.room;
     } catch (e) {
@@ -29,17 +46,14 @@ class MultiplayerClient {
   }
 
   setupRoomListeners() {
+    if (!this.room) return;
+
     this.room.onStateChange((state) => {
       if (this.onStateChange) this.onStateChange(state);
     });
 
-    this.room.onMessage("playerJoined", (message) => {
-      console.log(`[Multiplayer] Player ${message.name} joined`);
-    });
-
     this.room.onMessage("disasterStart", (message) => {
       console.log(`[Multiplayer] Disaster started:`, message);
-      // Logic to trigger disaster visual in App.jsx
     });
   }
 
@@ -59,7 +73,10 @@ class MultiplayerClient {
   }
 
   leave() {
-    if (this.room) this.room.leave();
+    if (this.room) {
+      this.room.leave();
+      this.room = null;
+    }
   }
 }
 
