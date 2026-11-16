@@ -8,14 +8,18 @@ import http from "http";
 
 // Colyseus 0.18 installs one CORS listener on the shared HTTP server that runs
 // for *every* request (including /api), and by default reflects any Origin.
-// Narrow it to the same allow-list the Express app uses so the two stay in sync.
+// In development we accept any localhost origin so the dev server can run on
+// any port without editing .env every time. In production the Express app's
+// CORS middleware already gates the /api routes.
 matchMaker.controller.getCorsHeaders = (headers) => {
   const origin = headers.get("origin");
-  const allowed = !origin || config.corsOrigins.includes(origin);
-  // An empty value overrides Colyseus' permissive `*` default and makes the
-  // browser reject the response for origins outside the allow-list.
+  const isLocalhost = !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  if (isLocalhost) {
+    return { "Access-Control-Allow-Origin": origin || "*" };
+  }
+  // Outside localhost: fall back to the Express allow-list.
   return {
-    "Access-Control-Allow-Origin": allowed ? origin || "*" : "",
+    "Access-Control-Allow-Origin": config.corsOrigins.includes(origin) ? origin : "",
   };
 };
 

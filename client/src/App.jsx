@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import Classroom from "./scenes/Classroom.jsx";
 import Player from "./components/Player.jsx";
+import RemotePlayer from "./components/RemotePlayer.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import ZoneDetector from "./components/ZoneDetector.jsx";
 import ActionPrompt from "./components/ActionPrompt.jsx";
 import WorldUpdater from "./components/WorldUpdater.jsx";
 import { hazardsRegistry } from "./game/hazards.js";
 import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
-import { multiplayerClient } from "./services/multiplayer.js";
 import {
   getMissionSummary,
   mergeVisitedZones,
@@ -21,6 +21,7 @@ import {
   getSessionProgress,
   updateSessionProgress,
 } from "./services/api.js";
+import { multiplayerClient } from "./services/multiplayer.js";
 import "./App.css";
 
 const DEFAULT_MISSION = {
@@ -135,6 +136,12 @@ export default function App() {
     actionPrompt: null
   });
 
+  // Other players in the room (for multiplayer)
+  const [remotePlayers, setRemotePlayers] = useState({});
+
+  // My player ID (to filter myself from remotePlayers)
+  const myPlayerId = useRef(null);
+
   // Proximity check for fires and action prompts
   const checkProximityToHazards = useCallback(() => {
     if (!playerRef.current || phase !== "playing") return;
@@ -192,6 +199,7 @@ export default function App() {
         spawnZ: PLAYER_SPAWN[2],
       });
       if (!cancelled && room) {
+        myPlayerId.current = room.sessionId || room.id;
         console.log(`[Multiplayer] Joined room ${room.roomId ?? room.id}`);
       }
     })();
@@ -201,6 +209,41 @@ export default function App() {
       multiplayerClient.leave();
     };
   }, [phase]);
+
+  // Set up multiplayer state change listener
+  const handleMultiplayerState = useCallback((state) => {
+    if (!state || !state.players) return;
+
+    const myId = myPlayerId.current;
+
+    const remotePlayersList = {};
+    // MapSchema is iterable but not plain object - convert it
+    for (const [id, player] of state.players) {
+      if (id === myId) continue; // Skip myself
+      remotePlayersList[id] = {
+        id,
+        name: player.name || `Player-${String(id).slice(0, 8)}`,
+        position: {
+          x: player.x,
+          y: player.y,
+          z: player.z
+        },
+        rotY: player.rotY,
+        active: player.active
+      };
+    }
+    setRemotePlayers(remotePlayersList);
+  }, []);
+
+  // Attach state listener to multiplayer client
+  useEffect(() => {
+    if (multiplayerClient) {
+      multiplayerClient.onStateChange = handleMultiplayerState;
+    }
+    return () => {
+      multiplayerClient.onStateChange = null;
+    };
+  }, [handleMultiplayerState]);
 
   // Persistence plumbing. Refs keep async callbacks from depending on state
   // that may change while a request is in flight.
@@ -465,6 +508,16 @@ export default function App() {
             multiplayerClient.sendMove(pos.x, pos.y, pos.z, pos.rotY)
           }
         />
+        {/* Render other players from the multiplayer room */}
+        {Object.entries(remotePlayers).map(([id, player]) => (
+          <RemotePlayer
+            key={id}
+            id={id}
+            name={player.name}
+            position={player.position}
+            rotY={player.rotY}
+          />
+        ))}
         <FollowCamera targetRef={playerRef} disasterState={disasterState} />
         <ZoneDetector
           targetRef={playerRef}
