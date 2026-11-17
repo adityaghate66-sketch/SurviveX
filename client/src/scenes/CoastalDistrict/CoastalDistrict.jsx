@@ -1,8 +1,9 @@
 // Coastal District 001 - Main Scene Component
-// Phase 1: Terrain and Geography
+// Phase 2: Roads and Town Layout
+// Updated to include roads and town layout
 //
 // This is the main scene file for the Coastal District environment.
-// It renders the geographical foundation: ocean, coastline, beach, river, and hills.
+// It renders the geographical foundation plus roads and town layout.
 
 import { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
@@ -12,17 +13,20 @@ import Beach from "./Beach.jsx";
 import River from "./River.jsx";
 import Hills from "./Hills.jsx";
 import Ocean from "./Ocean.jsx";
+import Roads from "./Roads.jsx";
+import ResidentialArea from "./ResidentialArea.jsx";
+import Beachfront from "./Beachfront.jsx";
+import { WALKABLE_BOUNDS, isWalkable } from "./coastalBounds.js";
 
-// Default camera position for the coastal scene
-// Positioned to show the full scope of the environment
+// Camera position optimized for the full 800m x 800m world
 const COASTAL_CAMERA_INITIAL = {
-  position: [0, 50, 400],  // High above, looking down at the coast
-  fov: 45,
+  position: [0, 150, 450],  // Higher to see the full world
+  fov: 40,
   near: 0.1,
   far: 5000,
 };
 
-export default function CoastalDistrict({ showDebug = false }) {
+export default function CoastalDistrict({ showDebug = false, showBounds = false }) {
   return (
     <Canvas
       shadows
@@ -31,12 +35,12 @@ export default function CoastalDistrict({ showDebug = false }) {
     >
       <Suspense fallback={null}>
         {/* Ambient lighting for the entire scene */}
-        <ambientLight intensity={0.4} />
+        <ambientLight intensity={0.5} />
 
         {/* Directional "sun" light - simulates late afternoon sun */}
         <directionalLight
-          position={[100, 200, 100]}
-          intensity={1.2}
+          position={[150, 250, 100]}
+          intensity={1.4}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
@@ -48,7 +52,7 @@ export default function CoastalDistrict({ showDebug = false }) {
           shadow-camera-far={1000}
         />
 
-        {/* Sky environment */}
+        {/* Sky color */}
         <color attach="background" args={["#87CEEB"]} />
 
         {/* Ocean - surrounds the entire coastal area */}
@@ -66,6 +70,15 @@ export default function CoastalDistrict({ showDebug = false }) {
         {/* Elevated green hills in northwest */}
         <Hills />
 
+        {/* Road network */}
+        <Roads />
+
+        {/* Beachfront hotels and harbour */}
+        <Beachfront />
+
+        {/* Residential neighborhood */}
+        <ResidentialArea />
+
         {/* Environment map for reflections */}
         <Environment
           preset="sunset"
@@ -73,7 +86,12 @@ export default function CoastalDistrict({ showDebug = false }) {
           ground={false}
         />
 
-        {/* Starry sky for nighttime look */}
+        {/* Debug: show walkable bounds */}
+        {showBounds && (
+          <WalkableBounds />
+        )}
+
+        {/* Starry sky for atmosphere */}
         <Stars
           radius={1000}
           depth={50}
@@ -85,3 +103,24 @@ export default function CoastalDistrict({ showDebug = false }) {
     </Canvas>
   );
 }
+
+// Debug component to show walkable bounds
+function WalkableBounds() {
+  return (
+    <group>
+      {/* Walkable area boundary */}
+      <mesh position={[0, 0.1, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[50, 55, 64]} />
+        <meshBasicMaterial
+          color="#00ff00"
+          transparent
+          opacity={0.3}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// Import THREE for the debug component
+import * as THREE from "three";
