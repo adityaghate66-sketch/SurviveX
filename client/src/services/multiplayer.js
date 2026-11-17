@@ -14,7 +14,6 @@ class MultiplayerClient {
     if (!IsBrowser) return false;
 
     try {
-      // Use @colyseus/sdk which is compatible with colyseus 0.18 server
       const { Client } = await import("@colyseus/sdk");
       this.Client = Client;
       this.client = new Client("ws://localhost:4000");
@@ -29,13 +28,11 @@ class MultiplayerClient {
     if (!this.Client || !this.client) return null;
 
     try {
-      // joinOrCreate returns a Room with client.sessionId as player ID
       this.room = await this.client.joinOrCreate("game_room", {
         sessionId,
         name,
         spawnX,
         spawnZ,
-        // The server expects sessionId as the client identifier
       });
 
       console.log(`[Multiplayer] Joined room ${this.room.roomId ?? this.room.id}`);
@@ -50,7 +47,6 @@ class MultiplayerClient {
   setupRoomListeners() {
     if (!this.room) return;
 
-    // Listen for state changes from the server
     this.room.onStateChange((state) => {
       if (this.onStateChange) this.onStateChange(state);
     });
@@ -70,33 +66,21 @@ class MultiplayerClient {
 
   /**
    * Send player movement to server
-   * The server expects: { type: "move", x, y, z, rotY }
+   * Uses Colyseus SDK format: room.send(type, payload)
    */
   sendMove(x, y, z, rotY) {
     if (!this.room) return;
-    this.room.send({
-      type: "move",
-      x,
-      y,
-      z,
-      rotY
-    });
+    this.room.send("move", { x, y, z, rotY });
   }
 
   sendZoneEnter(zoneId) {
     if (!this.room) return;
-    this.room.send({
-      type: "zoneEnter",
-      zoneId
-    });
+    this.room.send("zoneEnter", { zoneId });
   }
 
   sendAction(type, data) {
     if (!this.room) return;
-    this.room.send({
-      type,
-      ...data
-    });
+    this.room.send(type, data);
   }
 
   leave() {

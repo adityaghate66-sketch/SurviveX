@@ -46,10 +46,10 @@ const ERROR_MESSAGES = {
 
 // A stable, non-secret display name per browser. The backend uses it to find
 // the player's existing active session instead of creating a new one on every
-// reload. If localStorage is unavailable we still play, just as "guest".
+// reload. If sessionStorage is unavailable we still play, just as "guest".
 function getPlayerName() {
   try {
-    const stored = window.localStorage.getItem(PLAYER_NAME_KEY);
+    const stored = window.sessionStorage.getItem(PLAYER_NAME_KEY);
     if (stored) return stored;
 
     // 12 hex characters from a UUID: unique enough that two players never share
@@ -60,10 +60,30 @@ function getPlayerName() {
         : Math.random().toString(36).slice(2, 14).padEnd(12, "0");
 
     const generated = `player-${random}`;
-    window.localStorage.setItem(PLAYER_NAME_KEY, generated);
+    window.sessionStorage.setItem(PLAYER_NAME_KEY, generated);
     return generated;
   } catch {
     return "guest";
+  }
+}
+
+// Unique player ID for multiplayer - stored per-tab so each browser tab
+// gets its own identity even when sharing localStorage with other tabs.
+function getPlayerId() {
+  try {
+    const stored = window.sessionStorage.getItem("survivex.playerId");
+    if (stored) return stored;
+
+    const random =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID().replace(/-/g, "")
+        : Math.random().toString(36).slice(2, 16);
+
+    const generated = `p-${random}`;
+    window.sessionStorage.setItem("survivex.playerId", generated);
+    return generated;
+  } catch {
+    return "p-guest";
   }
 }
 
@@ -72,7 +92,7 @@ function getPlayerName() {
 // database stays authoritative.
 function readStoredSession() {
   try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
@@ -91,7 +111,7 @@ function readStoredSession() {
 
 function writeStoredSession(sessionId, missionCode) {
   try {
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, missionCode }));
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, missionCode }));
   } catch {
     // Private mode / quota: the session still works for this page view.
   }
@@ -99,7 +119,7 @@ function writeStoredSession(sessionId, missionCode) {
 
 function clearStoredSession() {
   try {
-    window.localStorage.removeItem(SESSION_KEY);
+    window.sessionStorage.removeItem(SESSION_KEY);
   } catch {
     // Nothing to clean up if storage is unavailable.
   }
@@ -199,8 +219,10 @@ export default function App() {
         spawnZ: PLAYER_SPAWN[2],
       });
       if (!cancelled && room) {
-        myPlayerId.current = room.sessionId || room.id;
-        console.log(`[Multiplayer] Joined room ${room.roomId ?? room.id}`);
+        // In @colyseus/sdk 0.18 the client's own id is `room.sessionId`.
+        // The server keys state.players by this same client.sessionId.
+        myPlayerId.current = room.sessionId;
+        console.log(`[Multiplayer] Joined room ${room.roomId ?? room.id}, player ID: ${room.sessionId}`);
       }
     })();
 
@@ -212,14 +234,19 @@ export default function App() {
 
   // Set up multiplayer state change listener
   const handleMultiplayerState = useCallback((state) => {
-    if (!state || !state.players) return;
+    if (!state || !state.players) {
+      console.log("[Multiplayer] State update: no state or players");
+      return;
+    }
 
     const myId = myPlayerId.current;
+    console.log("[Multiplayer] State update - myId:", myId, "players count:", state.players.size);
 
     const remotePlayersList = {};
     // MapSchema is iterable but not plain object - convert it
     for (const [id, player] of state.players) {
       if (id === myId) continue; // Skip myself
+      console.log(`[Multiplayer] Remote player: ${player.name || id}, pos: ${player.x.toFixed(2)}, ${player.z.toFixed(2)}`);
       remotePlayersList[id] = {
         id,
         name: player.name || `Player-${String(id).slice(0, 8)}`,

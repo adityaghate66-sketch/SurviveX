@@ -15,6 +15,15 @@ export class GameRoom extends Room {
     // Setup disaster system
     disasterServer.setRoom(this);
 
+    // Register client message handlers. In Colyseus 0.18 messages must be
+    // registered with onMessage(); defining an `onMessage(client, message)`
+    // method on the Room subclass shadows that API and silently registers
+    // nothing, which makes the server disconnect every client that sends.
+    // The wildcard handler also tolerates unknown/legacy message types.
+    this.onMessage("*", (client, type, message) =>
+      this.handleClientMessage(client, type, message)
+    );
+
     console.log(`[GameRoom] Created room ${this.state.sessionId}`);
   }
 
@@ -52,12 +61,12 @@ export class GameRoom extends Room {
     disasterServer.clear();
   }
 
-  // Handle player position updates
-  onMessage(client, message) {
+  // Handle client messages. `type` comes from room.send(type, payload).
+  handleClientMessage(client, type, message = {}) {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
-    switch (message.type) {
+    switch (type) {
       case "move":
         player.x = message.x;
         player.y = message.y;
@@ -87,7 +96,7 @@ export class GameRoom extends Room {
         break;
 
       default:
-        console.warn(`[GameRoom] Unknown message type: ${message.type}`);
+        console.warn(`[GameRoom] Unknown message type: ${type}`);
     }
   }
 
