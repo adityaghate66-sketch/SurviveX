@@ -13,13 +13,17 @@ import http from "http";
 // CORS middleware already gates the /api routes.
 matchMaker.controller.getCorsHeaders = (headers) => {
   const origin = headers.get("origin");
-  const isLocalhost = !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-  if (isLocalhost) {
+  // Accept localhost and private LAN addresses (for testing on the same WiFi).
+  const isLocalOrigin = !origin || /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin);
+  if (isLocalOrigin) {
     return { "Access-Control-Allow-Origin": origin || "*" };
   }
-  // Outside localhost: fall back to the Express allow-list.
+  // Production: use the configured CORS origins from the Express app
+  const allowed = config.corsOrigins.includes(origin);
   return {
-    "Access-Control-Allow-Origin": config.corsOrigins.includes(origin) ? origin : "",
+    "Access-Control-Allow-Origin": allowed ? origin : "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
   };
 };
 

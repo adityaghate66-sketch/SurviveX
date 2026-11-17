@@ -3,6 +3,28 @@
 
 const IsBrowser = typeof window !== "undefined";
 
+function toWsUrl(url) {
+  return url.replace(/^http:/, "ws:").replace(/^https:/, "wss:");
+}
+
+// Resolve the Colyseus endpoint. Env vars are baked in at BUILD time, so a
+// deployed frontend must set VITE_WS_URL (and VITE_API_BASE_URL) and rebuild.
+// With no env vars, derive it from the page itself: on localhost that gives
+// ws://localhost:4000, and on a LAN dev server it gives ws://<your-ip>:4000.
+function resolveWsUrl() {
+  const explicit = import.meta.env.VITE_WS_URL;
+  if (explicit) return toWsUrl(explicit);
+
+  const api = import.meta.env.VITE_API_BASE_URL;
+  // "/api" is the Vite dev proxy — it is not a usable WebSocket host.
+  if (api && /^https?:\/\//.test(api)) {
+    return toWsUrl(api.replace(/\/api\/?$/, ""));
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://${window.location.hostname}:4000`;
+}
+
 class MultiplayerClient {
   constructor() {
     this.client = null;
@@ -16,7 +38,9 @@ class MultiplayerClient {
     try {
       const { Client } = await import("@colyseus/sdk");
       this.Client = Client;
-      this.client = new Client("ws://localhost:4000");
+      const wsUrl = resolveWsUrl();
+      console.log("[Multiplayer] Connecting to", wsUrl);
+      this.client = new Client(wsUrl);
       return true;
     } catch (e) {
       console.warn("[Multiplayer] @colyseus/sdk not available, using local mode");
