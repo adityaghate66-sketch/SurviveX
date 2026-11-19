@@ -1,210 +1,323 @@
-// Terrain generation for Coastal District 001
-// Phase 1: Terrain and Geography
+// Terrain model for Coastal District 001
+// Phase 1: Terrain and Geography (corrected in Phase 2)
 //
-// This module defines the geographical layout of the coastal town:
-// - South: Arabian Sea and coastline
-// - Southwest: Beach and hotels
-// - Southeast: Fishing harbour
-// - Centre: Town square and commercial market
-// - North: Residential neighbourhood
-// - East: River and estuary
-// - Northwest: Elevated green hills and evacuation shelter
+// COORDINATE CONVENTION — this file is the single source of truth for the whole
+// environment. Every scene component and the road network position themselves
+// against it:
+//
+//   +X = east            -X = west
+//   +Z = north (inland)  -Z = south (Arabian Sea)
+//   y  = metres above sea level
+//
+// Geography:
+//   - South       : Arabian Sea, coastline at z = -300, dry beach to z = -250
+//   - Centre      : town square, commercial market
+//   - North       : residential neighbourhood on the southern hill slopes
+//   - Northwest   : elevated green hills and the evacuation shelter
+//   - East        : river valley running from the hills to the sea
+//   - Southeast   : fishing harbour at the river mouth
+//
+// Everything is generated from plain functions so the same numbers drive the
+// visual mesh, the roads and (later) player collision. Nothing here depends on
+// React or Three.js, which keeps it testable from Node.
 
-// World scale: 800m x 800m
-// 1 Three.js unit = 1 meter for intuitive positioning
 export const WORLD_SIZE = 800;
 export const WORLD_BOUNDS = {
-  minX: -WORLD_SIZE / 2,  // -400
-  maxX: WORLD_SIZE / 2,   // 400
-  minZ: -WORLD_SIZE / 2,  // -400
-  maxZ: WORLD_SIZE / 2,   // 400
+  minX: -WORLD_SIZE / 2, // -400
+  maxX: WORLD_SIZE / 2, //  400
+  minZ: -WORLD_SIZE / 2, // -400
+  maxZ: WORLD_SIZE / 2, //  400
 };
 
-// Terrain elevation (y = height in meters)
-// Key geographical features
+// Terrain mesh resolution. Roads and props sample the visible surface through
+// getMeshHeight(), which interpolates over this exact grid, so nothing floats
+// above or sinks below what the player actually sees.
+export const TERRAIN_SEGMENTS = 100; // 800m / 100 = 8m cells
+export const TERRAIN_CELL = WORLD_SIZE / TERRAIN_SEGMENTS;
+
+export const SEA_LEVEL = 0;
+
+// Coastline. The sea occupies z < -300; the beach ramp runs -300..-250 and the
+// flat coastal plain starts at z = -250.
 export const COASTLINE = {
-  // Northern edge of the Arabian Sea (ocean floor transitions to beach)
-  // The coast runs east-west, facing south towards the ocean
-  Z_COAST: -300,  // Center of beach area
-  // Beach extends from Z = -350 (west) to Z = -250 (east)
-  BEACH_START: -350,
+  Z_COAST: -300,
+  BEACH_START: -300,
   BEACH_END: -250,
 };
 
 export const BEACH = {
-  // Sandy beach area, sloping from coastline inland
-  // Width: ~100m from coast inland
-  // Slope: gentle rise of 0-10m from sea level
-  WIDTH: 100,
-  MAX_HEIGHT: 10,  // Beach dunes peak
-  // Beach area bounds in Z
-  MIN_Z: -450,  // Western end
-  MAX_Z: -150,  // Eastern end (meets town)
+  MIN_Z: -300,
+  MAX_Z: -250,
+  WIDTH: 50,
+  MAX_HEIGHT: 2,
 };
 
+// Fishing harbour, southeast coast, just east of the river mouth.
 export const HARBOR = {
-  // Fishing harbour on southeast coast
-  // Area includes docks, warehouses, and fish market
-  CENTER: { x: 100, z: 100 },  // Southeast quadrant
-  WIDTH: 80,
-  DEPTH: 120,
-  // Harbour is at sea level (y = 0 to y = -5 for water)
+  CENTER: { x: 285, z: -250 },
+  WIDTH: 110,
+  DEPTH: 110,
+  BASIN_DEPTH: -2.4,
 };
 
+// The river leaves the northern hills, runs down the eastern side of the town
+// and meets the sea at z = -310. Points are ordered source -> mouth.
 export const RIVER = {
-  // River originates in the north hills, flows through town east to meet the sea
-  SOURCE: { x: -50, z: -350 },  // North hills
-  MOUTH: { x: 200, z: 300 },     // Meets Arabian Sea in the east
-  WIDTH: 15,  // Average river width in meters
-  // The river flows roughly southeast through the center
+  SOURCE: { x: -60, z: 340 },
+  MOUTH: { x: 200, z: -310 },
+  PATH: [
+    { x: -60, z: 340 },
+    { x: 70, z: 300 },
+    { x: 140, z: 230 },
+    { x: 170, z: 150 },
+    { x: 195, z: 50 },
+    { x: 200, z: -80 },
+    { x: 190, z: -200 },
+    { x: 200, z: -310 },
+  ],
+  WIDTH: 18, // channel width in metres
+  BANK_BLEND: 28, // grassy banks blend into the channel over this distance
+  CARVE_DEPTH: 4.2,
+  ESTUARY_Z: -140, // channel starts widening south of this line
+  ESTUARY_BOOST: 1.3,
 };
 
+// Rolling green hills in the northwest. A smooth bump with zero slope at both
+// the centre and the rim, so it blends into the plain without a cliff.
 export const HILLS = {
-  // Elevated green hills in northwest
-  // Elevation: 50-120m above sea level
-  CENTER: { x: -200, z: -200 },
-  RADIUS: 150,
-  MAX_ELEVATION: 120,  // Highest point
-  BASE_ELEVATION: 50,  // Hill base
+  CENTER: { x: -280, z: 250 },
+  RADIUS: 210,
+  PEAK: 72,
+};
+
+export const EVACUATION_SHELTER = {
+  LOCATION: { x: -290, z: 290 },
+  SIZE: 40,
 };
 
 export const TOWN_CENTER = {
   CENTER: { x: 0, z: 0 },
-  RADIUS: 100,  // Town square area
+  RADIUS: 24,
 };
 
 export const RESIDENTIAL = {
-  // North of town center, on gently sloping terrain
-  CENTER: { x: -20, z: 200 },
-  RADIUS: 150,
+  CENTER: { x: -30, z: 200 },
+  RADIUS: 160,
 };
 
-export const EVACUATION_SHELTER = {
-  // Located on the highest ground in northwest hills
-  // Safe from all water-based disasters
-  LOCATION: { x: -280, z: -280 },
-  SIZE: 30,  // 30m x 30m area
-};
+// ---------------------------------------------------------------------------
+// Small math helpers (no Three.js dependency)
+// ---------------------------------------------------------------------------
 
-// Elevation function: returns the height at any (x, z) coordinate
-// Uses mathematical terrain generation for smooth, natural slopes
+export function clamp(value, min, max) {
+  return value < min ? min : value > max ? max : value;
+}
+
+export function clamp01(value) {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+export function smoothstep(t) {
+  const x = clamp01(t);
+  return x * x * (3 - 2 * x);
+}
+
+export function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function hash2(x, z) {
+  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// Deterministic 0..1 value used to break up flat colours without textures.
+export function groundVariation(x, z) {
+  return hash2(Math.round(x), Math.round(z));
+}
+
+// Shortest distance from a point to a polyline, plus the closest segment.
+export function distanceToPolyline(x, z, path) {
+  let best = Infinity;
+  let bestSegment = 0;
+  let bestT = 0;
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const lengthSq = dx * dx + dz * dz || 1;
+
+    let t = ((x - a.x) * dx + (z - a.z) * dz) / lengthSq;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+
+    const px = a.x + t * dx;
+    const pz = a.z + t * dz;
+    const distance = Math.hypot(x - px, z - pz);
+
+    if (distance < best) {
+      best = distance;
+      bestSegment = i;
+      bestT = t;
+    }
+  }
+
+  return { distance: best, segment: bestSegment, t: bestT };
+}
+
+// ---------------------------------------------------------------------------
+// Height model
+// ---------------------------------------------------------------------------
+
+function coastalPlain(z) {
+  // Gentle rise from the top of the beach (2.2m at z = -250) to inland
+  // (26m at z = 400). Gives the town a low, flood-prone coastal strip.
+  return lerp(2.2, 26, clamp01((z - BEACH.MAX_Z) / (WORLD_BOUNDS.maxZ - BEACH.MAX_Z)));
+}
+
+function oceanFloor(z) {
+  // Seabed: 0m at the shoreline, about -7m at z = -400.
+  return (z - COASTLINE.Z_COAST) * 0.07;
+}
+
+export function hillHeight(x, z) {
+  const distance = Math.hypot(x - HILLS.CENTER.x, z - HILLS.CENTER.z);
+  if (distance >= HILLS.RADIUS) return 0;
+  return HILLS.PEAK * smoothstep(1 - distance / HILLS.RADIUS);
+}
+
+function riverWidthFactor(z) {
+  return 1 + RIVER.ESTUARY_BOOST * smoothstep((RIVER.ESTUARY_Z - z) / 150);
+}
+
+// Depth removed from the terrain by the river channel (0 outside the valley).
+export function riverCarveDepth(x, z) {
+  const { distance } = distanceToPolyline(x, z, RIVER.PATH);
+  const halfWidth = (RIVER.WIDTH / 2) * riverWidthFactor(z);
+  const outer = halfWidth + RIVER.BANK_BLEND;
+
+  if (distance >= outer) return 0;
+  if (distance <= halfWidth) return RIVER.CARVE_DEPTH;
+
+  // Grassy bank: smoothly climbs back to the plain.
+  return RIVER.CARVE_DEPTH * (1 - smoothstep((distance - halfWidth) / RIVER.BANK_BLEND));
+}
+
+// True where the river channel is wide/deep enough to be open water.
+export function isRiverChannel(x, z, extra = 0) {
+  const { distance } = distanceToPolyline(x, z, RIVER.PATH);
+  return distance < (RIVER.WIDTH / 2) * riverWidthFactor(z) + extra;
+}
+
+export function harborBasinFactor(x, z) {
+  const distance = Math.hypot(x - HARBOR.CENTER.x, z - HARBOR.CENTER.z);
+  const radius = HARBOR.WIDTH / 2;
+  const outer = radius + 20;
+  if (distance >= outer) return 0;
+  return smoothstep(1 - distance / outer);
+}
+
+// Analytic terrain height at any world position.
 export function getTerrainHeight(x, z) {
-  let height = 0;
+  let height;
 
-  // 1. Base terrain: gentle slope from sea level (south) to higher ground (north)
-  // This creates a natural coastal plain that rises toward the hills
-  const northSlope = THREE.MathUtils.mapLinear(z, -400, 400, -5, 25);
-  height += northSlope;
-
-  // 2. Coastline transition: from ocean to beach
   if (z < COASTLINE.Z_COAST) {
-    // Ocean floor: slightly below sea level
-    height = THREE.MathUtils.mapLinear(z, -500, COASTLINE.Z_COAST, -10, -2);
-  } else if (z < COASTLINE.Z_COAST + 50) {
-    // Beach ramp: steep rise from ocean to beach level
-    height = THREE.MathUtils.mapLinear(z, COASTLINE.Z_COAST, COASTLINE.Z_COAST + 50, -2, 5);
+    height = oceanFloor(z);
+  } else if (z < BEACH.MAX_Z) {
+    const t = smoothstep((z - COASTLINE.Z_COAST) / (BEACH.MAX_Z - COASTLINE.Z_COAST));
+    // Dry sand: 0.05m at the waterline up to 2.2m at the back of the beach.
+    height = lerp(0.05, 2.2, t);
+  } else {
+    height = coastalPlain(z);
   }
 
-  // 3. Hills elevation
-  const hillDist = Math.sqrt(
-    Math.pow(x - HILLS.CENTER.x, 2) + Math.pow(z - HILLS.CENTER.z, 2)
-  );
-  if (hillDist < HILLS.RADIUS) {
-    // Smooth hill shape using a cosine-based curve
-    const hillFactor = (1 - Math.cos((hillDist / HILLS.RADIUS) * Math.PI)) / 2;
-    const hillElevation = THREE.MathUtils.lerp(HILLS.BASE_ELEVATION, HILLS.MAX_ELEVATION, hillFactor);
-    // Only apply if higher than current
-    height = Math.max(height, hillElevation);
-  }
+  height += hillHeight(x, z);
+  height -= riverCarveDepth(x, z);
 
-  // 4. River valley - slight depression where river flows
-  const riverDist = pointToLineDistance(x, z, RIVER.SOURCE, RIVER.MOUTH);
-  if (riverDist < RIVER.WIDTH) {
-    const riverDepth = THREE.MathUtils.mapLinear(riverDist, 0, RIVER.WIDTH / 2, 0, -3);
-    height += riverDepth;
-  }
-
-  // 5. Harbour area - slight depression for water
-  const harborCenterX = HARBOR.CENTER.x;
-  const harborCenterZ = HARBOR.CENTER.z;
-  const harborDist = Math.sqrt(
-    Math.pow(x - harborCenterX, 2) + Math.pow(z - harborCenterZ, 2)
-  );
-  if (harborDist < Math.max(HARBOR.WIDTH, HARBOR.DEPTH) / 2) {
-    // Harbor is at around sea level or slightly below
-    height = Math.min(height, -2);
+  // Harbour basin: a shallow bowl that the sea plane fills.
+  const basin = harborBasinFactor(x, z);
+  if (basin > 0) {
+    height = lerp(height, HARBOR.BASIN_DEPTH, basin);
   }
 
   return height;
 }
 
-// Helper: distance from point to line segment (for river calculation)
-function pointToLineDistance(px, pz, p1, p2) {
-  const A = px - p1.x;
-  const B = pz - p1.z;
-  const C = p2.x - p1.x;
-  const D = p2.z - p1.z;
+// Height of the *visible* terrain mesh at (x, z).
+//
+// TerrainMesh renders PlaneGeometry on a TERRAIN_SEGMENTS grid whose vertices
+// use getTerrainHeight(). Sampling the same grid here (bilinearly) means roads,
+// sidewalks and props sit exactly on the rendered surface instead of hovering
+// over it or sinking into it - the single biggest cause of "floating geometry".
+export function getMeshHeight(x, z) {
+  const gx = clamp((x - WORLD_BOUNDS.minX) / TERRAIN_CELL, 0, TERRAIN_SEGMENTS - 1e-6);
+  const gz = clamp((z - WORLD_BOUNDS.minZ) / TERRAIN_CELL, 0, TERRAIN_SEGMENTS - 1e-6);
 
-  const dot = A * C + B * D;
-  const lenSq = C * C + D * D;
-  let param = -1;
+  const i = Math.floor(gx);
+  const j = Math.floor(gz);
+  const fx = gx - i;
+  const fz = gz - j;
 
-  if (lenSq !== 0) {
-    param = dot / lenSq;
-  }
+  const x0 = WORLD_BOUNDS.minX + i * TERRAIN_CELL;
+  const z0 = WORLD_BOUNDS.minZ + j * TERRAIN_CELL;
 
-  let xx, zz;
-  if (param < 0) {
-    xx = p1.x;
-    zz = p1.z;
-  } else if (param > 1) {
-    xx = p2.x;
-    zz = p2.z;
-  } else {
-    xx = p1.x + param * C;
-    zz = p1.z + param * D;
-  }
+  const h00 = getTerrainHeight(x0, z0);
+  const h10 = getTerrainHeight(x0 + TERRAIN_CELL, z0);
+  const h01 = getTerrainHeight(x0, z0 + TERRAIN_CELL);
+  const h11 = getTerrainHeight(x0 + TERRAIN_CELL, z0 + TERRAIN_CELL);
 
-  const dx = px - xx;
-  const dz = pz - zz;
-  return Math.sqrt(dx * dx + dz * dz);
+  return lerp(lerp(h00, h10, fx), lerp(h01, h11, fx), fz);
 }
 
-// Import THREE for the lerp function (will be resolved at runtime)
-import * as THREE from "three";
+// ---------------------------------------------------------------------------
+// Classification (drives terrain colours and walkability)
+// ---------------------------------------------------------------------------
 
-// Terrain type classification for different visual treatments
 export function getTerrainType(x, z) {
-  // Ocean
-  if (z < -450) return "ocean";
-
-  // Beach
-  if (z >= -450 && z < -300 && Math.abs(x) < 200) return "beach";
-
-  // River
-  const riverDist = pointToLineDistance(x, z, RIVER.SOURCE, RIVER.MOUTH);
-  if (riverDist < RIVER.WIDTH) return "river";
-
-  // Harbour water
-  const harborDist = Math.sqrt(
-    Math.pow(x - HARBOR.CENTER.x, 2) + Math.pow(z - HARBOR.CENTER.z, 2)
-  );
-  if (harborDist < Math.max(HARBOR.WIDTH, HARBOR.DEPTH) / 2 + 10) return "harbour";
-
-  // Hills
-  const hillDist = Math.sqrt(
-    Math.pow(x - HILLS.CENTER.x, 2) + Math.pow(z - HILLS.CENTER.z, 2)
-  );
-  if (hillDist < HILLS.RADIUS) return "hills";
-
-  // Town/Land
+  if (z < COASTLINE.Z_COAST) return "ocean";
+  if (harborBasinFactor(x, z) > 0.35) return "harbour";
+  if (isRiverChannel(x, z, 2)) return "river";
+  if (z < BEACH.MAX_Z) return "beach";
+  if (hillHeight(x, z) > 3) return "hills";
   return "land";
 }
 
-// Collision boundaries for different terrain types
-export const TERRAIN_BOUNDS = {
-  OCEAN: { maxDepth: 20 },  // How deep the ocean areas are
-  BEACH: { minX: -200, maxX: 200, minZ: -450, maxZ: -250 },
-  RIVER_BANKS: { width: 8 },  // Walkable area on river sides
-  HILLS_ACCESS: { roads: [] },  // Will be defined in Phase 2
-};
+// Local slope in metres per metre, used for cheap shading and cliff detection.
+export function getSlope(x, z, step = 4) {
+  const dx = getTerrainHeight(x + step, z) - getTerrainHeight(x - step, z);
+  const dz = getTerrainHeight(x, z + step) - getTerrainHeight(x, z - step);
+  return Math.hypot(dx, dz) / (2 * step);
+}
+
+// X coordinate of the river channel centre at a given z. The path is ordered
+// strictly north -> south, so this is a simple piecewise interpolation.
+export function riverCentreAtZ(z) {
+  const path = RIVER.PATH;
+  if (z >= path[0].z) return path[0].x;
+  if (z <= path[path.length - 1].z) return path[path.length - 1].x;
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    if (z <= a.z && z >= b.z) {
+      const t = (a.z - z) / (a.z - b.z || 1);
+      return lerp(a.x, b.x, t);
+    }
+  }
+
+  return path[path.length - 1].x;
+}
+
+// Full width of the channel (bank to bank) at a given z.
+export function riverWidthAtZ(z) {
+  return RIVER.WIDTH * riverWidthFactor(z);
+}
+
+// Water surface height of the river. The channel bed descends from the hills
+// to the sea; the surface sits a little above the bed and never below the sea.
+export function getRiverSurfaceHeight(z) {
+  const centreX = riverCentreAtZ(z);
+  const bed = getTerrainHeight(centreX, z);
+  return Math.max(bed + 1.2, SEA_LEVEL + 0.03);
+}

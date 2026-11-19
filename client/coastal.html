@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SurviveX · Coastal District 001</title>
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        background: #a9cede;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      #coastal-hud {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: rgba(12, 30, 38, 0.72);
+        color: #eaf4f7;
+        font-size: 12px;
+        line-height: 1.5;
+        letter-spacing: 0.04em;
+        pointer-events: none;
+        backdrop-filter: blur(6px);
+      }
+
+      #coastal-hud strong {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #9fd6c8;
+        margin-bottom: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="coastal-hud">
+      <strong>Coastal District 001 · Phase 2</strong>
+      Drag to orbit · scroll to zoom · right-drag to pan
+    </div>
+    <script type="module" src="/src/coastalMain.jsx"></script>
+  </body>
+</html>

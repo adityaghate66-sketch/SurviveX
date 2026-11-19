@@ -1,56 +1,60 @@
-// Ocean and water bodies component for Coastal District 001
+// Ocean / Arabian Sea for Coastal District 001
 // Phase 1: Terrain and Geography
 //
-// Renders the Arabian Sea surrounding the coastal town.
+// One large plane at sea level covers every place the heightfield drops below
+// zero: the open sea in the south, the estuary and the harbour basin. The old
+// version animated a material that had no uniforms; this one actually
+// displaces a small vertex grid, which is cheap (under 2.5k vertices).
 
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { COASTLINE, WORLD_SIZE } from "./terrain.js";
+import { SEA_LEVEL, WORLD_SIZE } from "./terrain.js";
+
+const SEA_SIZE = WORLD_SIZE * 1.8;
+const SEA_SEGMENTS = 48;
+const WATER_LEVEL = SEA_LEVEL + 0.03;
 
 export default function Ocean() {
-  const waterRef = useRef();
-  const waveUniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uWaveSpeed: { value: 0.5 },
-    uWaveFrequency: { value: 2.0 },
-    uWaveAmplitude: { value: 0.5 },
-  }), []);
+  const meshRef = useRef();
 
-  // Create a large plane for the ocean
-  const oceanGeometry = useMemo(() => {
-    // Ocean extends beyond the world bounds
-    const size = WORLD_SIZE * 1.5;
-    const geometry = new THREE.PlaneGeometry(size, size, 64, 64);
-    geometry.rotateX(-Math.PI / 2);
-    return geometry;
+  const { geometry, basePositions } = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEA_SEGMENTS, SEA_SEGMENTS);
+    geo.rotateX(-Math.PI / 2);
+    return {
+      geometry: geo,
+      basePositions: Float32Array.from(geo.attributes.position.array),
+    };
   }, []);
 
-  const oceanMaterial = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
-      color: "#1e3a5f",
-      roughness: 0.9,
-      metalness: 0.1,
-      transparent: true,
-      opacity: 0.8,
-    });
-  }, []);
-
-  // Animate wave-like movement
   useFrame(({ clock }) => {
-    waveUniforms.uTime.value = clock.getElapsedTime();
+    const mesh = meshRef.current;
+    if (!mesh) return;
 
-    if (waterRef.current) {
-      // Gentle wave animation
-      const time = clock.getElapsedTime();
-      waterRef.current.material.uniforms = waveUniforms;
+    const positions = mesh.geometry.attributes.position;
+    const time = clock.getElapsedTime();
 
-      // Pulsating effect for water
-      waterRef.current.geometry.attributes.position.needsUpdate = true;
+    for (let i = 0; i < positions.count; i++) {
+      const x = basePositions[i * 3];
+      const z = basePositions[i * 3 + 2];
+      const wave =
+        Math.sin(x * 0.05 + time * 0.7) * 0.09 +
+        Math.sin(z * 0.07 - time * 0.5) * 0.07;
+      positions.setY(i, WATER_LEVEL + wave);
     }
+
+    positions.needsUpdate = true;
   });
 
   return (
-    <mesh ref={waterRef} geometry={oceanGeometry} material={oceanMaterial} receiveShadow />
+    <mesh ref={meshRef} geometry={geometry} name="ocean" renderOrder={-1}>
+      <meshStandardMaterial
+        color="#1c5d78"
+        roughness={0.22}
+        metalness={0.35}
+        transparent
+        opacity={0.94}
+      />
+    </mesh>
   );
 }

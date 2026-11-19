@@ -1,95 +1,118 @@
-// Terrain visualization component for Coastal District 001
-// Phase 1: Terrain and Geography
+// Terrain mesh for Coastal District 001
+// Phase 1: Terrain and Geography (corrected in Phase 2)
 //
-// This component renders the base terrain mesh with proper geometry and materials
-// for the coastal environment.
+// Renders the heightfield that every other component is positioned against.
+// A single vertex-coloured geometry covers the whole 800m x 800m world: sand on
+// the coast, green plains inland, rock on the steep hill flanks and a darker
+// seabed under the water. That costs one draw call and no textures, which keeps
+// the browser build cheap while still reading as a real coastline.
 
 import { useMemo } from "react";
 import * as THREE from "three";
 import {
   WORLD_SIZE,
-  COASTLINE,
-  BEACH,
-  HILLS,
-  RIVER,
+  TERRAIN_SEGMENTS,
   getTerrainHeight,
+  getSlope,
   getTerrainType,
+  groundVariation,
+  hillHeight,
+  clamp01,
 } from "./terrain.js";
 
-// Terrain segment size for better performance
-const SEGMENT_SIZE = 50;  // 50m segments
-const SEGMENTS_X = Math.ceil(WORLD_SIZE / SEGMENT_SIZE);
-const SEGMENTS_Z = Math.ceil(WORLD_SIZE / SEGMENT_SIZE);
+// Palette. Kept together so the environment has one colour language.
+const COLORS = {
+  seabed: new THREE.Color("#5e6b52"),
+  wetSand: new THREE.Color("#c9b98f"),
+  sand: new THREE.Color("#e4d3a8"),
+  riverbank: new THREE.Color("#5f7449"),
+  grass: new THREE.Color("#5d8046"),
+  grassDry: new THREE.Color("#7d8a4e"),
+  hillGrass: new THREE.Color("#4a7339"),
+  rock: new THREE.Color("#8a8272"),
+};
 
-export default function TerrainMesh({
-  visible = true,
-  showDebug = false,
-}) {
-  // Create the terrain geometry using a heightmap approach
-  const terrainGeometry = useMemo(() => {
-    const width = WORLD_SIZE;
-    const depth = WORLD_SIZE;
-    const widthSegments = SEGMENTS_X;
-    const depthSegments = SEGMENTS_Z;
+const colorScratch = new THREE.Color();
 
-    const geometry = new THREE.PlaneGeometry(width, depth, widthSegments, depthSegments);
+function colorAt(x, z) {
+  const type = getTerrainType(x, z);
+  const slope = getSlope(x, z);
+  const variation = groundVariation(x, z);
+  const jitter = (variation - 0.5) * 0.1;
 
-    // Rotate the plane to be horizontal (Three.js planes are Y-up by default)
-    geometry.rotateX(-Math.PI / 2);
+  if (type === "ocean") {
+    colorScratch.copy(COLORS.seabed);
+  } else if (type === "beach") {
+    const wetness = clamp01((z + 300) / 25); // darker wet sand near the surf
+    colorScratch.copy(COLORS.wetSand).lerp(COLORS.sand, wetness);
+  } else if (type === "river") {
+    colorScratch.copy(COLORS.riverbank);
+  } else if (type === "harbour") {
+    colorScratch.copy(COLORS.seabed).lerp(COLORS.sand, 0.35);
+  } else if (type === "hills" || hillHeight(x, z) > 2) {
+    colorScratch.copy(COLORS.grass).lerp(COLORS.hillGrass, clamp01(hillHeight(x, z) / 60));
+  } else {
+    // Low coastal plain: slightly drier grass away from the river.
+    colorScratch.copy(COLORS.grass).lerp(COLORS.grassDry, 0.35 + variation * 0.3);
+  }
 
-    // Apply heightmap to each vertex
-    const positionAttribute = geometry.attributes.position;
+  // Exposed rock where the ground is steep (hill flanks, river banks).
+  if (slope > 0.45) {
+    colorScratch.lerp(COLORS.rock, clamp01((slope - 0.45) / 0.5));
+  }
+
+  colorScratch.offsetHSL(0, 0, jitter);
+  return colorScratch;
+}
+
+export default function TerrainMesh({ visible = true, showDebug = false }) {
+  const geometry = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(
+      WORLD_SIZE,
+      WORLD_SIZE,
+      TERRAIN_SEGMENTS,
+      TERRAIN_SEGMENTS
+    );
+
+    // Three.js planes are XY by default; lay it flat so Y is height.
+    geo.rotateX(-Math.PI / 2);
+
+    const positions = geo.attributes.position;
+    const colors = new Float32Array(positions.count * 3);
     const vertex = new THREE.Vector3();
 
-    for (let i = 0; i < positionAttribute.count; i++) {
-      vertex.fromBufferAttribute(positionAttribute, i);
+    for (let i = 0; i < positions.count; i++) {
+      vertex.fromBufferAttribute(positions, i);
 
-      // Convert from local plane coordinates to world coordinates
-      // Plane is centered at origin, so we need to offset
-      const worldX = vertex.x;
-      const worldZ = vertex.z;
-      const worldY = getTerrainHeight(worldX, worldZ);
+      const height = getTerrainHeight(vertex.x, vertex.z);
+      positions.setY(i, height);
 
-      vertex.y = worldY;
-      positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+      // Colour is sampled at the vertex; geometry is dense enough (8m cells)
+      // that this reads as a gradient rather than flat facets.
+      const color = colorAt(vertex.x, vertex.z);
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
     }
 
-    geometry.computeVertexNormals();
-    return geometry;
-  }, [visible, showDebug]);
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
 
-  // Create terrain materials based on type
-  const terrainMaterial = useMemo(() => {
-    // Base material - ocean/sea floor
-    const oceanMaterial = new THREE.meshStandardMaterial({
-      color: "#1e3a5f",  // Deep ocean blue
-      roughness: 0.8,
-      metalness: 0.1,
-      side: THREE.DoubleSide,
-    });
-
-    return oceanMaterial;
+    return geo;
   }, []);
 
-  // Create a debug visualization showing terrain types
   if (showDebug) {
     return (
-      <group visible={visible}>
-        <mesh geometry={terrainGeometry}>
-          <meshStandardMaterial
-            color="#88ccff"
-            wireframe={true}
-            transparent={true}
-            opacity={0.3}
-          />
-        </mesh>
-      </group>
+      <mesh geometry={geometry} visible={visible}>
+        <meshStandardMaterial color="#88ccff" wireframe transparent opacity={0.35} />
+      </mesh>
     );
   }
 
   return (
-    <group visible={visible}>
-      <mesh geometry={terrainGeometry} material={terrainMaterial} receiveShadow />
-    </group>
+    <mesh geometry={geometry} visible={visible} receiveShadow name="terrain">
+      <meshStandardMaterial vertexColors roughness={0.95} metalness={0} />
+    </mesh>
   );
 }

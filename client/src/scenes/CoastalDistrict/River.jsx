@@ -1,56 +1,80 @@
-// River and estuary component for Coastal District 001
-// Phase 1: Terrain and Geography
+// River and estuary for Coastal District 001
+// Phase 1: Terrain and Geography (corrected in Phase 2)
 //
-// Renders the river valley and estuary where the river meets the sea.
+// Replaces the old tube that hugged the terrain. This builds a flat water
+// surface that sits *inside* the carved valley, widens into an estuary at the
+// coast and follows the channel centre line from the hills to the sea.
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { RIVER, getTerrainHeight } from "./terrain.js";
+import {
+  RIVER,
+  SEA_LEVEL,
+  getRiverSurfaceHeight,
+  riverWidthAtZ,
+} from "./terrain.js";
+
+const SAMPLES = 90;
 
 export default function River() {
-  // Create river as a mesh with water-like material
-  const riverGeometry = useMemo(() => {
-    // Create a curved river path using a tube geometry
-    const curvePoints = [
-      new THREE.Vector3(RIVER.SOURCE.x, 0, RIVER.SOURCE.z),
-      new THREE.Vector3(-100, 0, 100),
-      new THREE.Vector3(50, 0, 200),
-      new THREE.Vector3(RIVER.MOUTH.x, 0, RIVER.MOUTH.z),
-    ];
+  const geometry = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3(
+      RIVER.PATH.map((point) => new THREE.Vector3(point.x, 0, point.z))
+    );
 
-    const curve = new THREE.CatmullRomCurve3(curvePoints);
+    const positions = [];
+    const uvs = [];
+    const indices = [];
 
-    // Tube geometry follows the curved path
-    const tubeGeometry = new THREE.TubeGeometry(curve, 32, RIVER.WIDTH / 2, 8, false);
+    for (let i = 0; i < SAMPLES; i++) {
+      const t = i / (SAMPLES - 1);
+      const point = curve.getPointAt(t);
+      const tangent = curve.getTangentAt(t);
 
-    // Apply water depth to vertices
-    const positionAttribute = tubeGeometry.attributes.position;
-    const vertex = new THREE.Vector3();
+      // Perpendicular in the XZ plane.
+      const nx = -tangent.z;
+      const nz = tangent.x;
+      const normalLength = Math.hypot(nx, nz) || 1;
 
-    for (let i = 0; i < positionAttribute.count; i++) {
-      vertex.fromBufferAttribute(positionAttribute, i);
-      const y = getTerrainHeight(vertex.x, vertex.z) - 0.5;  // Water is slightly below terrain
-      positionAttribute.setXYZ(i, vertex.x, y, vertex.z);
+      const halfWidth = riverWidthAtZ(point.z) / 2;
+      const surface = Math.max(getRiverSurfaceHeight(point.z), SEA_LEVEL + 0.06);
+
+      positions.push(
+        point.x + (nx / normalLength) * halfWidth,
+        surface,
+        point.z + (nz / normalLength) * halfWidth,
+        point.x - (nx / normalLength) * halfWidth,
+        surface,
+        point.z - (nz / normalLength) * halfWidth
+      );
+
+      uvs.push(0, t, 1, t);
+
+      if (i < SAMPLES - 1) {
+        const a = i * 2;
+        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
     }
 
-    tubeGeometry.computeVertexNormals();
-    return tubeGeometry;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
   }, []);
 
-  const riverMaterial = new THREE.meshStandardMaterial({
-    color: "#4a90d9",  // Water blue
-    roughness: 0.3,
-    metalness: 0.6,
-    transparent: true,
-    opacity: 0.7,
-    envMapIntensity: 0.5,
-  });
-
   return (
-    <mesh
-      geometry={riverGeometry}
-      material={riverMaterial}
-      receiveShadow
-    />
+    <mesh geometry={geometry} name="river" receiveShadow>
+      <meshStandardMaterial
+        color="#2f6f7d"
+        roughness={0.18}
+        metalness={0.4}
+        transparent
+        opacity={0.92}
+        polygonOffset
+        polygonOffsetFactor={-1}
+      />
+    </mesh>
   );
 }

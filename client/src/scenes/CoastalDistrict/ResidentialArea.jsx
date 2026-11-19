@@ -1,166 +1,159 @@
-// Residential area component for Coastal District 001
+// Residential neighbourhood for Coastal District 001
 // Phase 2: Roads and Town Layout
 //
-// Renders the residential neighborhood with houses, streets, and sidewalks.
+// Layout massing only: houses and street lamps placed against the terrain and
+// set back from the road, so the street reads as a street. Detailed facades,
+// balconies and compound walls are Phase 3/4 work.
+//
+// Fixes from the previous version:
+//   - imported RESIDENTIAL_STREETS from terrain.js, which never exported it
+//   - houses were spawned on the road centre line and at a fixed y = 3, i.e.
+//     buried 15m under the northern slopes
+//   - a fresh material was created for every sidewalk mesh
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { RESIDENTIAL, RESIDENTIAL_STREETS } from "./terrain.js";
+import { getMeshHeight } from "./terrain.js";
+import { RESIDENTIAL_STREETS } from "./roads.js";
 
-// Residential house component
-function House({ position, size = [8, 5, 10], color = "#a0522d" }) {
+// Shared materials (one allocation for the whole neighbourhood).
+const WALL_COLORS = ["#e8cfa8", "#e3bda4", "#dcc9a2", "#efd7b6", "#cfa47c", "#e6c3b0"];
+const WALL_MATERIALS = WALL_COLORS.map(
+  (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0 })
+);
+const ROOF_MATERIAL = new THREE.MeshStandardMaterial({ color: "#9c4f33", roughness: 0.9, metalness: 0 });
+const PLINTH_MATERIAL = new THREE.MeshStandardMaterial({ color: "#9a8f7c", roughness: 1, metalness: 0 });
+const POLE_MATERIAL = new THREE.MeshStandardMaterial({ color: "#3a3f42", roughness: 0.6, metalness: 0.4 });
+const BULB_MATERIAL = new THREE.MeshStandardMaterial({
+  color: "#fff6d5",
+  emissive: "#ffe9a8",
+  emissiveIntensity: 1.4,
+  roughness: 0.4,
+});
+
+// Deterministic RNG so the layout does not reshuffle between reloads (which
+// would also make the layout tests flaky).
+function createRng(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function House({ x, z, width, depth, height, wallIndex, rotation = 0 }) {
+  const ground = getMeshHeight(x, z);
+
   return (
-    <group position={position}>
-      {/* Main house body */}
-      <mesh receiveShadow>
-        <boxGeometry args={size} />
-        <meshStandardMaterial color={color} roughness={0.7} metalness={0.1} />
+    <group position={[x, ground, z]} rotation={[0, rotation, 0]}>
+      {/* Plinth: sunk into the slope so a house on sloping ground never floats. */}
+      <mesh position={[0, 0.1, 0]} material={PLINTH_MATERIAL} receiveShadow castShadow>
+        <boxGeometry args={[width + 0.6, 1.4, depth + 0.6]} />
       </mesh>
 
-      {/* Roof */}
-      <mesh position={[0, size[1] / 2 + 1, 0]} receiveShadow>
-        <coneGeometry args={[Math.max(size[0], size[2]) / 2 + 0.5, 3, 4]} />
-        <meshStandardMaterial color="#8b4513" roughness={0.8} />
+      {/* Body */}
+      <mesh position={[0, height / 2 + 0.5, 0]} material={WALL_MATERIALS[wallIndex]} castShadow receiveShadow>
+        <boxGeometry args={[width, height, depth]} />
+      </mesh>
+
+      {/* Hip roof, rotated so its four faces align with the walls. */}
+      <mesh position={[0, height + 0.5 + 1.1, 0]} rotation={[0, Math.PI / 4, 0]} material={ROOF_MATERIAL} castShadow>
+        <coneGeometry args={[Math.hypot(width, depth) / 2 + 0.4, 2.2, 4]} />
       </mesh>
     </group>
   );
 }
 
-// Street lamp component
-function StreetLamp({ position }) {
+function StreetLamp({ x, z }) {
+  const ground = getMeshHeight(x, z);
   return (
-    <group position={position}>
-      {/* Pole */}
-      <mesh>
-        <cylinderGeometry args={[0.1, 0.1, 5, 8]} />
-        <meshStandardMaterial color="#333333" />
+    <group position={[x, ground, z]}>
+      <mesh position={[0, 2.5, 0]} material={POLE_MATERIAL} castShadow>
+        <cylinderGeometry args={[0.09, 0.12, 5, 8]} />
       </mesh>
-
-      {/* Lamp head */}
-      <mesh position={[0, 4, 0]}>
-        <cylinderGeometry args={[0.3, 0.3, 0.3, 8]} />
-        <meshStandardMaterial color="#555555" />
+      <mesh position={[0.35, 4.95, 0]} rotation={[0, 0, Math.PI / 2]} material={POLE_MATERIAL}>
+        <cylinderGeometry args={[0.06, 0.06, 0.9, 6]} />
       </mesh>
-
-      {/* Light */}
-      <mesh position={[0, 4.5, 0]}>
-        <sphereGeometry args={[0.2, 8, 8]} />
-        <meshBasicMaterial
-          color="#fff"
-          emissive="#ffff99"
-          emissiveIntensity={0.5}
-        />
+      <mesh position={[0.8, 4.8, 0]} material={BULB_MATERIAL}>
+        <sphereGeometry args={[0.28, 12, 10]} />
       </mesh>
     </group>
   );
 }
 
-// Sidewalk component for residential streets
-function ResidentialSidewalk({ start, end, width = 2 }) {
-  const geometry = useMemo(() => {
-    const length = Math.sqrt((end.x - start.x) ** 2 + (end.z - start.z) ** 2);
-    return new THREE.BoxGeometry(length, width, 0.3);
-  }, [start, end, width]);
-
-  const position = useMemo(() => {
-    const midX = (start.x + end.x) / 2;
-    const midZ = (start.z + end.z) / 2;
-    const angle = Math.atan2(end.z - start.z, end.x - start.x);
-
-    return {
-      position: [midX, -0.1, midZ],
-      rotation: [0, angle, 0],
-    };
-  }, [start, end]);
-
-  return (
-    <mesh
-      geometry={geometry}
-      material={new THREE.meshStandardMaterial({
-        color: "#e0e0e0",
-        roughness: 0.9,
-        metalness: 0,
-      })}
-      position={position.position}
-      rotation={position.rotation}
-    />
-  );
-}
-
-// Generate residential houses along the streets
-function generateHouses() {
+function generateLayout() {
+  const rng = createRng(20261);
   const houses = [];
-
-  // Create houses for each residential street
-  RESIDENTIAL_STREETS.forEach((street, streetIndex) => {
-    const count = 8;  // Houses per street
-    for (let i = 0; i < count; i++) {
-      const t = i / (count - 1);
-      const x = street.start.x + t * (street.end.x - street.start.x) + (Math.random() - 0.5) * 4;
-      const z = street.start.z + t * (street.end.z - street.start.z) + (Math.random() - 0.5) * 4;
-
-      houses.push({
-        position: [x, 3, z],
-        size: [6 + Math.random() * 4, 4 + Math.random() * 3, 8 + Math.random() * 4],
-        color: `hsl(${20 + Math.random() * 30}, ${70 + Math.random() * 20}%, ${60 + Math.random() * 20}%)`,
-      });
-    }
-  });
-
-  return houses;
-}
-
-// Generate street lamps along streets
-function generateStreetLamps() {
   const lamps = [];
 
-  RESIDENTIAL_STREETS.forEach((street, streetIndex) => {
-    const lampCount = 4;
-    for (let i = 0; i < lampCount; i++) {
-      const t = i / (lampCount - 1);
-      const x = street.start.x + t * (street.end.x - street.start.x);
-      const z = street.start.z + t * (street.end.z - street.start.z);
+  RESIDENTIAL_STREETS.forEach((street) => {
+    // Our residential streets run east-west, so the setback is along z.
+    const setback = street.width / 2 + 5.5;
+    const xs = [-122, -94, -66, -38, 20, 46];
 
-      lamps.push({
-        position: [x, 0, z],
-      });
+    xs.forEach((x, index) => {
+      for (const side of [-1, 1]) {
+        // Leave the junction with the town spine (x = 0) clear.
+        if (Math.abs(x) < 22) continue;
+
+        const jitterX = (rng() - 0.5) * 3;
+        const jitterZ = (rng() - 0.5) * 2;
+        houses.push({
+          x: x + jitterX,
+          z: street.waypoints[1].z + side * setback + jitterZ,
+          width: 7 + rng() * 4,
+          depth: 8 + rng() * 4,
+          height: 4.2 + rng() * 2.6,
+          wallIndex: Math.floor(rng() * WALL_MATERIALS.length),
+          rotation: side > 0 ? Math.PI : 0,
+          key: `${street.name}-${index}-${side}`,
+        });
+      }
+    });
+
+    // Lamps on the south shoulder, roughly every 40m.
+    for (let x = -110; x <= 40; x += 40) {
+      lamps.push({ x, z: street.waypoints[1].z - setback + 1, key: `${street.name}-lamp-${x}` });
     }
   });
 
-  return lamps;
+  // Church cross street: a few houses on its east side, facing the road.
+  for (let z = 150; z <= 250; z += 34) {
+    houses.push({
+      x: 68 + rng() * 2,
+      z,
+      width: 7 + rng() * 3,
+      depth: 8 + rng() * 3,
+      height: 4.5 + rng() * 2,
+      wallIndex: Math.floor(rng() * WALL_MATERIALS.length),
+      rotation: -Math.PI / 2,
+      key: `cross-${z}`,
+    });
+  }
+
+  return { houses, lamps };
 }
 
 export default function ResidentialArea() {
-  const houses = useMemo(() => generateHouses(), []);
-  const lamps = useMemo(() => generateStreetLamps(), []);
+  const { houses, lamps } = useMemo(() => generateLayout(), []);
 
   return (
     <group name="residential-area">
-      {/* Sidewalks */}
-      {RESIDENTIAL_STREETS.map((street, i) => (
-        <ResidentialSidewalk
-          key={`sidewalk-${i}`}
-          start={street.start}
-          end={street.end}
-        />
-      ))}
-
-      {/* Houses */}
-      {houses.map((house, i) => (
+      {houses.map((house) => (
         <House
-          key={`house-${i}`}
-          position={house.position}
-          size={house.size}
-          color={house.color}
+          key={house.key}
+          x={house.x}
+          z={house.z}
+          width={house.width}
+          depth={house.depth}
+          height={house.height}
+          wallIndex={house.wallIndex}
+          rotation={house.rotation}
         />
       ))}
 
-      {/* Street lamps */}
-      {lamps.map((lamp, i) => (
-        <StreetLamp
-          key={`lamp-${i}`}
-          position={lamp.position}
-        />
+      {lamps.map((lamp) => (
+        <StreetLamp key={lamp.key} x={lamp.x} z={lamp.z} />
       ))}
     </group>
   );
