@@ -9,20 +9,35 @@ import http from "http";
 // Colyseus 0.18 installs one CORS listener on the shared HTTP server that runs
 // for *every* request (including /api), and by default reflects any Origin.
 // In development we accept any localhost origin so the dev server can run on
-// any port without editing .env every time. In production the Express app's
-// CORS middleware already gates the /api routes.
+// any port without editing .env every time. In production we allow the configured
+// origins and the methods/headers needed by the API (including PUT/PATCH).
 matchMaker.controller.getCorsHeaders = (headers) => {
   const origin = headers.get("origin");
   // Accept localhost and private LAN addresses (for testing on the same WiFi).
-  const isLocalOrigin = !origin || /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin);
+  const isLocalOrigin =
+    !origin ||
+    /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(
+      origin
+    );
   if (isLocalOrigin) {
-    return { "Access-Control-Allow-Origin": origin || "*" };
+    return {
+      "Access-Control-Allow-Origin": origin || "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
   }
   // Production: use the configured CORS origins from the Express app
   const allowed = config.corsOrigins.includes(origin);
+  if (!allowed) {
+    return {
+      "Access-Control-Allow-Origin": "null",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+  }
   return {
-    "Access-Control-Allow-Origin": allowed ? origin : "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };
 };
