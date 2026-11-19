@@ -29,16 +29,25 @@ export function calculateProgress(zoneIds) {
 
 /** Everything the mission card needs, derived in one pass. */
 export function getMissionSummary(zoneIds) {
-  const visited = new Set(normalizeVisitedZones(zoneIds));
-  const explored = ZONES.filter((zone) => visited.has(zone.id));
-  const remaining = ZONES.filter((zone) => !visited.has(zone.id));
+  return summarizeMission(ZONES, zoneIds);
+}
+
+/**
+ * Same summary for any zone list. Mission 002 (coastal) has its own zones and
+ * its own progress store, so it must not go through the classroom ZONE_IDS.
+ */
+export function summarizeMission(zones, zoneIds) {
+  const known = new Set(Array.isArray(zoneIds) ? zoneIds : []);
+  const explored = zones.filter((zone) => known.has(zone.id));
+  const remaining = zones.filter((zone) => !known.has(zone.id));
 
   return {
     explored,
     remaining,
     visitedCount: explored.length,
-    totalCount: ZONES.length,
-    progress: calculateProgress(zoneIds),
-    isComplete: explored.length === ZONES.length,
+    totalCount: zones.length,
+    progress:
+      zones.length === 0 ? 0 : Math.min(MAX_PROGRESS, Math.round((explored.length / zones.length) * MAX_PROGRESS)),
+    isComplete: zones.length > 0 && explored.length === zones.length,
   };
 }

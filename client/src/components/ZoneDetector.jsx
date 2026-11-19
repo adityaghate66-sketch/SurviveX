@@ -12,7 +12,7 @@ import { findZoneAtPosition } from "../game/zoneDetection.js";
  * clears the ref so a later re-entry is reported again. The parent decides
  * whether that re-entry is a duplicate mission-wise.
  */
-export default function ZoneDetector({ targetRef, onDiscover, enabled = true }) {
+export default function ZoneDetector({ targetRef, onDiscover, enabled = true, zones }) {
   const zoneIdRef = useRef(null);
   const onDiscoverRef = useRef(onDiscover);
 
@@ -31,7 +31,9 @@ export default function ZoneDetector({ targetRef, onDiscover, enabled = true }) 
       return;
     }
 
-    const zone = findZoneAtPosition(target.position);
+    const zone = zones
+      ? findZoneAtPosition(target.position, zones)
+      : findZoneAtPosition(target.position);
     const nextZoneId = zone?.id ?? null;
 
     if (nextZoneId === zoneIdRef.current) return;

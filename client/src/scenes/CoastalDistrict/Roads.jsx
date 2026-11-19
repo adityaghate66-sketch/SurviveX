@@ -8,11 +8,12 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { getMeshHeight, getTerrainHeight } from "./terrain.js";
+import { getMeshHeight } from "./terrain.js";
 import {
   ALL_ROADS,
   BRIDGES,
   BEACH_PROMENADE,
+  bridgeDeckHeightAt,
   getRoadIntersections,
   HARBOUR_QUAY,
 } from "./roads.js";
@@ -143,15 +144,11 @@ function Bridge({ bridge }) {
   const { start, end, width } = bridge;
 
   const deck = useMemo(() => {
-    const startHeight = Math.max(getTerrainHeight(start.x, start.z), 0) + 0.4;
-    const endHeight = Math.max(getTerrainHeight(end.x, end.z), 0) + 0.4;
     const span = Math.hypot(end.x - start.x, end.z - start.z);
-    const arch = 2.4;
 
-    const heightAt = (x, z, t) => {
-      const base = startHeight + (endHeight - startHeight) * t;
-      return base + Math.sin(Math.PI * t) * arch;
-    };
+    // Same function the player physics uses, so the walkable deck and the
+    // visible deck can never disagree.
+    const heightAt = (x, z, t) => bridgeDeckHeightAt(bridge, t);
 
     const geometry = buildRibbon([start, end], width, {
       spacing: Math.max(3, span / 12),

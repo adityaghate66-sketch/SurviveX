@@ -276,6 +276,59 @@ export const ALL_ROADS = [
 
 export const BRIDGES = [HIGHWAY_BRIDGE, MARKET_BRIDGE];
 
+// ---------------------------------------------------------------------------
+// Bridge surfaces
+// ---------------------------------------------------------------------------
+// The bridge decks are the only place where the player may stand above open
+// water, so walkability and ground height have to know about them. These
+// helpers are derived from the same bridge data Roads.jsx renders, which means
+// the deck the player walks on is exactly the deck that is drawn.
+
+export const BRIDGE_ARCH = 2.4; // metres the deck rises at mid-span
+
+const DECK_MARGIN = 0.45; // keeps the player inside the rails
+
+// Height of the deck at 0..1 along the span (0 = start/west, 1 = end/east).
+export function bridgeDeckHeightAt(bridge, t) {
+  const startHeight = Math.max(getTerrainHeight(bridge.start.x, bridge.start.z), 0) + 0.4;
+  const endHeight = Math.max(getTerrainHeight(bridge.end.x, bridge.end.z), 0) + 0.4;
+  return startHeight + (endHeight - startHeight) * t + Math.sin(Math.PI * t) * BRIDGE_ARCH;
+}
+
+// Where a world position falls on a bridge deck.
+// Returns { t, height } or null when the position is off the deck.
+export function getBridgeSurface(bridge, x, z, margin = DECK_MARGIN) {
+  const dx = bridge.end.x - bridge.start.x;
+  const dz = bridge.end.z - bridge.start.z;
+  const lengthSq = dx * dx + dz * dz;
+  if (lengthSq === 0) return null;
+
+  const t = ((x - bridge.start.x) * dx + (z - bridge.start.z) * dz) / lengthSq;
+  if (t < 0 || t > 1) return null;
+
+  const closestX = bridge.start.x + dx * t;
+  const closestZ = bridge.start.z + dz * t;
+  if (Math.hypot(x - closestX, z - closestZ) > bridge.width / 2 - margin) return null;
+
+  return { t, height: bridgeDeckHeightAt(bridge, t) };
+}
+
+export function isOnBridgeDeck(x, z, margin = DECK_MARGIN) {
+  return BRIDGES.some((bridge) => getBridgeSurface(bridge, x, z, margin) !== null);
+}
+
+// Deck height at a position, or null when the position is not on a bridge.
+export function getBridgeDeckHeight(x, z, margin = DECK_MARGIN) {
+  let best = null;
+
+  for (const bridge of BRIDGES) {
+    const surface = getBridgeSurface(bridge, x, z, margin);
+    if (surface && (best === null || surface.height > best)) best = surface.height;
+  }
+
+  return best;
+}
+
 // Junction markers. Filled roads deserve a disc/ring so the seam between two
 // ribbons does not show through as grass.
 export function getRoadIntersections() {

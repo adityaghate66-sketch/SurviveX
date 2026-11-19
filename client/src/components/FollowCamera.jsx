@@ -2,11 +2,9 @@ import { useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
-// Where the camera sits relative to the player (behind and above).
-const CAMERA_OFFSET = new THREE.Vector3(0, 8, 10.5);
-
-// Height on the player that the camera looks at.
-const LOOK_AT_HEIGHT = 1.2;
+// Default (classroom) framing.
+const DEFAULT_OFFSET = new THREE.Vector3(0, 8, 10.5);
+const DEFAULT_LOOK_AT_HEIGHT = 1.2;
 
 // Higher = camera catches up faster. 6 keeps it smooth but responsive.
 const FOLLOW_SPEED = 6;
@@ -19,19 +17,30 @@ const FOLLOW_SPEED = 6;
  * uses `1 - Math.exp(-speed * delta)` so the motion feels the same at 60fps and
  * 144fps.
  */
-export default function FollowCamera({ targetRef, disasterState = "none" }) {
+export default function FollowCamera({
+  targetRef,
+  disasterState = "none",
+  offset,
+  lookAtHeight,
+}) {
   const { camera } = useThree();
   const desiredPosition = useRef(new THREE.Vector3());
   const lookAtTarget = useRef(new THREE.Vector3());
+
+  const camOffset = offset
+    ? new THREE.Vector3(offset[0], offset[1], offset[2])
+    : DEFAULT_OFFSET;
+  const camLookAtHeight =
+    typeof lookAtHeight === "number" ? lookAtHeight : DEFAULT_LOOK_AT_HEIGHT;
 
   useFrame((state, delta) => {
     const target = targetRef.current;
     if (!target) return;
 
     desiredPosition.current.set(
-      target.position.x + CAMERA_OFFSET.x,
-      target.position.y + CAMERA_OFFSET.y,
-      target.position.z + CAMERA_OFFSET.z
+      target.position.x + camOffset.x,
+      target.position.y + camOffset.y,
+      target.position.z + camOffset.z
     );
 
     camera.position.lerp(
@@ -49,7 +58,7 @@ export default function FollowCamera({ targetRef, disasterState = "none" }) {
 
     lookAtTarget.current.set(
       target.position.x,
-      target.position.y + LOOK_AT_HEIGHT,
+      target.position.y + camLookAtHeight,
       target.position.z
     );
     camera.lookAt(lookAtTarget.current);

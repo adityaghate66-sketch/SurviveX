@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import Classroom from "./scenes/Classroom.jsx";
+import CoastalWorld from "./scenes/CoastalDistrict/CoastalWorld.jsx";
 import Player from "./components/Player.jsx";
+import CoastalPlayer from "./components/CoastalPlayer.jsx";
 import RemotePlayer from "./components/RemotePlayer.jsx";
 import FollowCamera from "./components/FollowCamera.jsx";
 import ZoneDetector from "./components/ZoneDetector.jsx";
@@ -12,7 +14,15 @@ import { PLAYER_SPAWN } from "./scenes/classroomLayout.js";
 import {
   getMissionSummary,
   mergeVisitedZones,
+  summarizeMission,
 } from "./game/missionProgress.js";
+import {
+  COASTAL_CAMERA_OFFSET,
+  COASTAL_LOOK_AT_HEIGHT,
+  COASTAL_MISSION,
+  COASTAL_ZONES,
+  COASTAL_ZONE_IDS,
+} from "./game/coastalMission.js";
 import {
   completeSession,
   createSession,
@@ -43,6 +53,21 @@ const ERROR_MESSAGES = {
   expired: "Your saved session has expired. Start the mission to begin a new one.",
   failed: "We couldn't start your mission. Please try again.",
 };
+
+const COASTAL_STORAGE_KEY = "survivex.coastalZones";
+
+function loadCoastalVisited() {
+  try {
+    const raw = window.sessionStorage.getItem(COASTAL_STORAGE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    const known = new Set(COASTAL_ZONE_IDS);
+    return arr.filter((id) => known.has(id));
+  } catch {
+    return [];
+  }
+}
 
 // A stable, non-secret display name per browser. The backend uses it to find
 // the player's existing active session instead of creating a new one on every
@@ -161,6 +186,11 @@ export default function App() {
 
   // My player ID (to filter myself from remotePlayers)
   const myPlayerId = useRef(null);
+
+  // Mission 002 / coastal scene state
+  const [scene, setScene] = useState("classroom");
+  const [coastalVisited, setCoastalVisited] = useState(loadCoastalVisited);
+  const coastalVisitedRef = useRef(coastalVisited);
 
   // Proximity check for fires and action prompts
   const checkProximityToHazards = useCallback(() => {
@@ -282,6 +312,42 @@ export default function App() {
   const flushingRef = useRef(false);
 
   const summary = useMemo(() => getMissionSummary(visitedZones), [visitedZones]);
+  const coastalSummary = useMemo(
+    () => summarizeMission(COASTAL_ZONES, coastalVisited),
+    [coastalVisited]
+  );
+
+  useEffect(() => {
+    coastalVisitedRef.current = coastalVisited;
+    try {
+      window.sessionStorage.setItem(COASTAL_STORAGE_KEY, JSON.stringify(coastalVisited));
+    } catch {
+      // ignore storage errors
+    }
+  }, [coastalVisited]);
+
+  // Dev debug hook
+  useEffect(() => {
+    if (typeof window === "undefined" || !import.meta.env?.DEV) return undefined;
+    const api = {
+      setPlayerPosition: (x = 0, y = 0, z = 0) => {
+        const p = playerRef.current;
+        if (!p) return null;
+        p.position.set(x, y, z);
+        return { x: p.position.x, y: p.position.y, z: p.position.z };
+      },
+      getPlayerPosition: () => {
+        const p = playerRef.current;
+        if (!p) return null;
+        return { x: p.position.x, y: p.position.y, z: p.position.z };
+      },
+      getScene: () => scene,
+    };
+    window.__survivexDebug = api;
+    return () => {
+      if (window.__survivexDebug === api) delete window.__survivexDebug;
+    };
+  }, [scene]);
 
   // Give a brand-new player their guest identity immediately, so the same name
   // is reused even if they refresh before ever starting the mission.
@@ -434,6 +500,18 @@ export default function App() {
     }
   }, [mission.code, applyServerProgress, flushPendingZones, markMissionComplete]);
 
+  const startCoastalMission = useCallback(() => {
+    setScene("coastal");
+    setPhase("playing");
+    setNotification(null);
+  }, []);
+
+  const returnToClassroom = useCallback(() => {
+    setScene("classroom");
+    setPhase("idle");
+    setNotification(null);
+  }, []);
+
   // Retry zones that failed to save during a short outage. Sessions are never
   // created from a timer: that only happens on an explicit Start Mission click.
   useEffect(() => {
@@ -451,19 +529,28 @@ export default function App() {
   // re-entering a known zone changes nothing.
   const handleZoneDiscover = useCallback(
     (zone) => {
-      // Nothing can be discovered before the API has confirmed a session.
-      if (phase !== "playing" || !zone?.id) return;
-
+      if (!zone?.id) return;
+      if (scene === "coastal") {
+        if (phase !== "playing") return;
+        if (coastalVisitedRef.current.includes(zone.id)) return;
+        const next = COASTAL_ZONE_IDS.filter(
+          (id) => coastalVisitedRef.current.includes(id) || id === zone.id
+        );
+        setCoastalVisited(next);
+        setNotification({ id: zone.id, name: zone.name, token: Date.now() });
+        return;
+      }
+      // classroom
+      if (phase !== "playing") return;
       if (visitedZones.includes(zone.id)) {
         if (pendingZonesRef.current.size > 0) flushPendingZones();
         return;
       }
-
       setVisitedZones((current) => mergeVisitedZones(current, [zone.id]));
       setNotification({ id: zone.id, name: zone.name, token: Date.now() });
       persistZone(zone.id);
     },
-    [phase, visitedZones, persistZone, flushPendingZones]
+    [phase, visitedZones, persistZone, flushPendingZones, scene]
   );
 
   useEffect(() => {
@@ -516,42 +603,71 @@ export default function App() {
       <Canvas
         shadows
         camera={{
-          // Starts behind the player; FollowCamera takes over on the first frame.
-          position: [PLAYER_SPAWN[0], 8, PLAYER_SPAWN[2] + 10.5],
+          position:
+            scene === "coastal"
+              ? [0, 8, 10.5]
+              : [PLAYER_SPAWN[0], 8, PLAYER_SPAWN[2] + 10.5],
           fov: 50,
           near: 0.1,
-          far: 100,
+          far: 3000,
         }}
       >
         <color attach="background" args={["#A9C9DC"]} />
 
-        <Classroom activeProp={activeProp} />
-        <Player
-          bodyRef={playerRef}
-          active={phase === "playing"}
-          activeProp={activeProp}
-          setActiveProp={setActiveProp}
-          onPositionUpdate={(pos) =>
-            multiplayerClient.sendMove(pos.x, pos.y, pos.z, pos.rotY)
-          }
-        />
-        {/* Render other players from the multiplayer room */}
-        {Object.entries(remotePlayers).map(([id, player]) => (
-          <RemotePlayer
-            key={id}
-            id={id}
-            name={player.name}
-            position={player.position}
-            rotY={player.rotY}
+        {scene === "classroom" ? (
+          <>
+            <Classroom activeProp={activeProp} />
+            <Player
+              bodyRef={playerRef}
+              active={phase === "playing"}
+              activeProp={activeProp}
+              setActiveProp={setActiveProp}
+              onPositionUpdate={(pos) =>
+                multiplayerClient.sendMove(pos.x, pos.y, pos.z, pos.rotY)
+              }
+            />
+            {Object.entries(remotePlayers).map(([id, player]) => (
+              <RemotePlayer
+                key={id}
+                id={id}
+                name={player.name}
+                position={player.position}
+                rotY={player.rotY}
+              />
+            ))}
+          </>
+        ) : (
+          <>
+            <CoastalWorld showBounds={false} debugStats={import.meta.env?.DEV} />
+            <CoastalPlayer
+              bodyRef={playerRef}
+              active={phase === "playing"}
+              onPositionUpdate={(pos) =>
+                multiplayerClient.sendMove(pos.x, pos.y, pos.z, pos.rotY)
+              }
+            />
+          </>
+        )}
+
+        {scene === "classroom" ? (
+          <FollowCamera targetRef={playerRef} disasterState={disasterState} />
+        ) : (
+          <FollowCamera
+            targetRef={playerRef}
+            disasterState={disasterState}
+            offset={[COASTAL_CAMERA_OFFSET[0], COASTAL_CAMERA_OFFSET[1], COASTAL_CAMERA_OFFSET[2]]}
+            lookAtHeight={COASTAL_LOOK_AT_HEIGHT}
           />
-        ))}
-        <FollowCamera targetRef={playerRef} disasterState={disasterState} />
+        )}
+
         <ZoneDetector
           targetRef={playerRef}
           enabled={phase === "playing"}
           onDiscover={handleZoneDiscover}
+          zones={scene === "coastal" ? COASTAL_ZONES : undefined}
         />
-        {hazardState.actionPrompt && (
+
+        {scene === "classroom" && hazardState.actionPrompt && (
           <ActionPrompt
             visible
             text={hazardState.actionPrompt.text}
@@ -559,11 +675,13 @@ export default function App() {
             color={hazardState.actionPrompt.color}
           />
         )}
-        <WorldUpdater
-          activeProp={activeProp}
-          hazardState={hazardState}
-          checkProximityToHazards={checkProximityToHazards}
-        />
+        {scene === "classroom" && (
+          <WorldUpdater
+            activeProp={activeProp}
+            hazardState={hazardState}
+            checkProximityToHazards={checkProximityToHazards}
+          />
+        )}
       </Canvas>
 
       <header className="game-header">
@@ -619,37 +737,44 @@ export default function App() {
       </header>
 
       <section className="mission-card" title={missionSource === "backend" ? "Loaded from backend" : "Using local fallback"}>
-        <p className="eyebrow">MISSION {mission.code || "001"}</p>
-        <h2>{mission.title}</h2>
-        <p>{mission.description}</p>
+        <p className="eyebrow">
+          MISSION {scene === "coastal" ? COASTAL_MISSION.code : mission.code || "001"}
+        </p>
+        <h2>{scene === "coastal" ? COASTAL_MISSION.title : mission.title}</h2>
+        <p>{scene === "coastal" ? COASTAL_MISSION.description : mission.description}</p>
 
-        <div
-          className="mission-progress"
-          role="progressbar"
-          aria-label="Mission progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={summary.progress}
-        >
-          <span style={{ width: `${summary.progress}%` }} />
-        </div>
+        {(() => {
+          const activeSummary = scene === "coastal" ? coastalSummary : summary;
+          return (
+            <>
+              <div
+                className="mission-progress"
+                role="progressbar"
+                aria-label="Mission progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={activeSummary.progress}
+              >
+                <span style={{ width: `${activeSummary.progress}%` }} />
+              </div>
+              <div className="mission-progress-meta">
+                <small>
+                  OBJECTIVE: {(scene === "coastal" ? COASTAL_MISSION.objective : mission.objective || "").toUpperCase() || "EXPLORE THE ENVIRONMENT"}
+                </small>
+                <span className="mission-percentage">{activeSummary.progress}%</span>
+              </div>
+            </>
+          );
+        })()}
 
-        <div className="mission-progress-meta">
-          <small>
-            OBJECTIVE: {(mission.objective || "").toUpperCase() || "EXPLORE THE ENVIRONMENT"}
-          </small>
-          <span className="mission-percentage">{summary.progress}%</span>
-        </div>
-
-        {/* The briefing doubles as the mission introduction panel: the
-            classroom only becomes playable once the API has a session. */}
         <div className="mission-actions">
-          {phase === "playing" ? (
+          {scene === "classroom" && phase === "playing" && (
             <p className="mission-session">
               <span className="status-dot" />
               MISSION IN PROGRESS
             </p>
-          ) : (
+          )}
+          {scene === "classroom" && phase !== "playing" && (
             <button
               type="button"
               className="mission-start"
@@ -663,16 +788,26 @@ export default function App() {
                   : "START MISSION"}
             </button>
           )}
+          {scene === "classroom" && summary.isComplete && phase === "playing" && (
+            <button type="button" className="mission-next" onClick={startCoastalMission}>
+              START MISSION 002
+            </button>
+          )}
+          {scene === "coastal" && (
+            <button type="button" className="mission-return" onClick={returnToClassroom}>
+              RETURN TO CLASSROOM
+            </button>
+          )}
 
-          {missionState === "loading" && (
+          {scene === "classroom" && missionState === "loading" && (
             <p className="mission-hint">Loading mission…</p>
           )}
-          {missionState === "fallback" && (
+          {scene === "classroom" && missionState === "fallback" && (
             <p className="mission-hint">
               Briefing unavailable from the server — using the built-in mission.
             </p>
           )}
-          {sessionError && (
+          {scene === "classroom" && sessionError && (
             <p className="mission-error" role="alert">
               {sessionError}
             </p>
@@ -680,33 +815,39 @@ export default function App() {
         </div>
 
         <div className="zone-summary">
-          <div>
-            <span className="zone-summary-title">
-              EXPLORED ({summary.explored.length}/{summary.totalCount})
-            </span>
-            {summary.explored.length > 0 ? (
-              <ul>
-                {summary.explored.map((zone) => (
-                  <li key={zone.id}>{zone.name}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="zone-empty">None yet</p>
-            )}
-          </div>
-
-          <div>
-            <span className="zone-summary-title">REMAINING</span>
-            {summary.remaining.length > 0 ? (
-              <ul>
-                {summary.remaining.map((zone) => (
-                  <li key={zone.id}>{zone.name}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="zone-empty">All zones explored</p>
-            )}
-          </div>
+          {(() => {
+            const activeSummary = scene === "coastal" ? coastalSummary : summary;
+            return (
+              <>
+                <div>
+                  <span className="zone-summary-title">
+                    EXPLORED ({activeSummary.explored.length}/{activeSummary.totalCount})
+                  </span>
+                  {activeSummary.explored.length > 0 ? (
+                    <ul>
+                      {activeSummary.explored.map((zone) => (
+                        <li key={zone.id}>{zone.name}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="zone-empty">None yet</p>
+                  )}
+                </div>
+                <div>
+                  <span className="zone-summary-title">REMAINING</span>
+                  {activeSummary.remaining.length > 0 ? (
+                    <ul>
+                      {activeSummary.remaining.map((zone) => (
+                        <li key={zone.id}>{zone.name}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="zone-empty">All zones explored</p>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </section>
 
@@ -724,7 +865,7 @@ export default function App() {
 
       <div className="scene-label">
         <span className="scene-label-dot" />
-        CLASSROOM · ZONE A
+        {scene === "coastal" ? "COASTAL DISTRICT · ZONE B" : "CLASSROOM · ZONE A"}
       </div>
 
       {disasterState === "earthquake" && (
@@ -742,13 +883,28 @@ export default function App() {
         </div>
       )}
 
-      {summary.isComplete && (
+      {scene === "classroom" && summary.isComplete && (
         <div className="mission-complete" role="status">
           <span className="mission-complete-eyebrow">
             MISSION {mission.code || "001"} COMPLETE
           </span>
           <strong>Mission Completed</strong>
           <p>All five classroom zones explored.</p>
+          <button type="button" className="mission-next" onClick={startCoastalMission}>
+            START MISSION 002
+          </button>
+        </div>
+      )}
+      {scene === "coastal" && coastalSummary.isComplete && (
+        <div className="mission-complete" role="status">
+          <span className="mission-complete-eyebrow">
+            MISSION {COASTAL_MISSION.code} COMPLETE
+          </span>
+          <strong>Mission Completed</strong>
+          <p>All coastal zones explored.</p>
+          <button type="button" className="mission-return" onClick={returnToClassroom}>
+            RETURN TO CLASSROOM
+          </button>
         </div>
       )}
     </main>
