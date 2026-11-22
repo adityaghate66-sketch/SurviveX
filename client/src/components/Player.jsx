@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { clampToRoom, resolveObstacle } from "../game/collision.js";
-import { ROOM_BOUNDS, OBSTACLES, PLAYER_SPAWN, DESKS, EMERGENCY_PROPS } from "../scenes/classroomLayout.js";
+import { WALKABLE_BOUNDS, isWalkable, getWalkableHeight } from "../scenes/CoastalDistrict/coastalBounds.js";
 
 const MOVE_SPEED = 4; // units per second
 const TURN_SPEED = 14; // how quickly the character turns to face a new direction
@@ -100,16 +100,19 @@ export default function Player({ bodyRef, active = true, activeProp, setActivePr
       player.rotation.y += difference * Math.min(1, TURN_SPEED * delta);
     }
 
-    // Keep the player inside the room and out of the desks.
-    clampToRoom(player.position, PLAYER_RADIUS, ROOM_BOUNDS);
+    // Keep the player inside walkable bounds and out of deep water / harbour / river.
+    clampToRoom(player.position, PLAYER_RADIUS, WALKABLE_BOUNDS);
 
     for (const obstacle of OBSTACLES) {
       resolveObstacle(player.position, PLAYER_RADIUS, obstacle);
     }
 
-    clampToRoom(player.position, PLAYER_RADIUS, ROOM_BOUNDS);
+    clampToRoom(player.position, PLAYER_RADIUS, WALKABLE_BOUNDS);
 
-    // Take cover logic
+    // Keep player on walkable terrain (not deep water, not harbour, not river).
+    const onWalkable = isWalkable(player.position.x, player.position.z);
+
+    // Take cover logic only works on land (not water).
     let nearDesk = false;
     for (const desk of DESKS) {
       const dx = player.position.x - desk.position[0];
@@ -119,9 +122,8 @@ export default function Player({ bodyRef, active = true, activeProp, setActivePr
         break;
       }
     }
-
-    const shouldCover = pressed.KeyC && nearDesk;
-    if (shouldCover !== isCovered) setIsCovered(shouldCover);
+    const canTakeCover = onWalkable && pressed.KeyC && nearDesk;
+    if (canTakeCover !== isCovered) setIsCovered(canTakeCover);
 
     // Emergency prop interaction (Press F to use)
     let currentActiveProp = null;
@@ -139,6 +141,9 @@ export default function Player({ bodyRef, active = true, activeProp, setActivePr
       }
     }
     if (!currentActiveProp && currentProp) updateActiveProp(null);
+
+    // Align player y-height with terrain.
+    player.position.y = getWalkableHeight(player.position.x, player.position.z);
 
     // Share the player's transform with the multiplayer room.
     if (onPositionUpdate) {
