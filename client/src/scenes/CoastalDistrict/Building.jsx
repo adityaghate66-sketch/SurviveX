@@ -3,9 +3,8 @@
 //
 // Reusable building component with various architectural styles.
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import * as THREE from "three";
-import { getRandomVariant } from "./BuildingTypes.js";
 
 /**
  * Base building with walls, roof, and optional features
@@ -34,26 +33,9 @@ export default function Building({
     });
   }, [buildingColor, materialOverrides]);
 
-  // Calculate roof height
+  // Four-sided hip roof: base sits flush with the top of the walls.
   const roofHeight = 1.5 + size[1] * 0.2;
-
-  const roofGeometry = useMemo(() => {
-    // Use a hip roof (all sides slope down)
-    const points = [
-      new THREE.Vector2(-size[0] / 2, -size[2] / 2),
-      new THREE.Vector2(size[0] / 2, -size[2] / 2),
-      new THREE.Vector2(size[0] / 2, size[2] / 2),
-      new THREE.Vector2(-size[0] / 2, size[2] / 2),
-    ];
-    return new THREE.Shape(points);
-  }, [size]);
-
-  const roofHeightCalc = useMemo(() => {
-    return new THREE.ExtrudeGeometry(roofGeometry, {
-      depth: roofHeight,
-      bevelEnabled: false,
-    });
-  }, [roofGeometry, roofHeight]);
+  const roofRadius = Math.max(size[0], size[2]) / 2 + 0.5;
 
   return (
     <group position={position}>
@@ -62,26 +44,18 @@ export default function Building({
 
       {/* Roof */}
       <mesh
-        geometry={roofHeightCalc}
-        material={new THREE.MeshStandardMaterial({
-          color: roofColor,
-          roughness: 0.8,
-          metalness: 0.1,
-        })}
-        rotation={[0, 0, 0]}
+        rotation={[0, Math.PI / 4, 0]}
         position={[0, size[1] / 2 + roofHeight / 2, 0]}
         castShadow
         receiveShadow
       >
-        {/* Rotate roof to face up */}
-        <mesh>
-          <coneGeometry args={[Math.max(size[0], size[2]) / 2 + 0.5, roofHeight, 4]} />
-        </mesh>
+        <coneGeometry args={[roofRadius, roofHeight, 4]} />
+        <meshStandardMaterial color={roofColor} roughness={0.8} metalness={0.1} />
       </mesh>
 
       {/* Optional features rendered by child components */}
       {features.map((feature, i) => (
-        <React.Fragment key={i}>
+        <Fragment key={i}>
           {feature.type === "balcony" && (
             <Balcony position={feature.position} size={feature.size} color={feature.color} />
           )}
@@ -91,7 +65,7 @@ export default function Building({
           {feature.type === "window" && (
             <Window position={feature.position} size={feature.size} color={feature.color} />
           )}
-        </React.Fragment>
+        </Fragment>
       ))}
     </group>
   );

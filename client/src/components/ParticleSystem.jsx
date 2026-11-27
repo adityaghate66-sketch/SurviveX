@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { hazardsRegistry } from "../game/hazards.js";
@@ -6,15 +6,16 @@ import { hazardsRegistry } from "../game/hazards.js";
 // Simple smoke cloud visual for hazards
 export function SmokeCloud({ hazard }) {
   const meshRef = useRef();
-  const [time, setTime] = useState(0);
 
   useFrame(({ clock }, delta) => {
-    setTime(t => t + delta);
-    if (meshRef.current) {
-      // Gentle floating animation
-      meshRef.current.position.y += Math.sin(time * 2) * 0.001;
-      meshRef.current.rotation.y += delta * 0.1;
-    }
+    const mesh = meshRef.current;
+    if (!mesh || !hazard?.active) return;
+
+    // Driven by the frame clock, not React state: re-rendering 60 times a
+    // second just to bob a mesh would starve the rest of the game.
+    const baseY = hazard.position.y + 1;
+    mesh.position.y = baseY + Math.sin(clock.getElapsedTime() * 2) * 0.05;
+    mesh.rotation.y += delta * 0.1;
   });
 
   if (!hazard?.active) return null;
@@ -23,7 +24,10 @@ export function SmokeCloud({ hazard }) {
   const size = 0.3 + density * 0.5;
 
   return (
-    <mesh ref={meshRef}>
+    <mesh
+      ref={meshRef}
+      position={[hazard.position.x, hazard.position.y + 1, hazard.position.z]}
+    >
       <sphereGeometry args={[size, 8, 6]} />
       <meshStandardMaterial
         color="#64748b"
@@ -36,41 +40,11 @@ export function SmokeCloud({ hazard }) {
   );
 }
 
-// Hook to access particle system in any component
-export function useParticleSystem() {
-  const [emitting, setEmitting] = useState(false);
-  const [particleCount, setParticleCount] = useState(0);
-
-  const emit = useCallback((position, count = 10) => {
-    const particles = hazardsRegistry.particleSystem.emit(position, count);
-    setParticleCount(prev => prev + count);
-    setEmitting(true);
-    return particles;
-  }, []);
-
-  const clear = useCallback(() => {
-    hazardsRegistry.particleSystem.reset();
-    setEmitting(false);
-    setParticleCount(0);
-  }, []);
-
-  // Update particle count every frame
-  useFrame(() => {
-    setParticleCount(hazardsRegistry.particleSystem.getActiveParticles().length);
-  });
-
-  return { emitting, particleCount, emit, clear };
-}
-
-// Main particle system component for instancing
+// Drives smoke particle physics from inside the R3F frame loop.
 export default function ParticleSystem() {
-  const groupRef = useRef();
-
-  useFrame(({ clock }, deltaTime) => {
+  useFrame((state, delta) => {
     if (!hazardsRegistry.particleSystem.active) return;
-
-    // Update particle system physics
-    hazardsRegistry.particleSystem.update(deltaTime);
+    hazardsRegistry.particleSystem.update(delta);
   });
 
   return null;

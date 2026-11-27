@@ -2,7 +2,7 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 
-import CoastalWorld, { SceneStats } from "./CoastalWorld.jsx";
+import CoastalWorld from "./CoastalWorld.jsx";
 
 const COASTAL_CAMERA = {
   position: [180, 210, -540],

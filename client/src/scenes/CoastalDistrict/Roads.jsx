@@ -193,7 +193,7 @@ function Bridge({ bridge }) {
     }
 
     return { geometry, railLeft, railRight, posts };
-  }, [start, end, width]);
+  }, [bridge, start, end, width]);
 
   return (
     <group name={`bridge-${bridge.name}`}>
@@ -280,5 +280,3 @@ export default function Roads() {
     </group>
   );
 }
-
-export { getRoadIntersections };

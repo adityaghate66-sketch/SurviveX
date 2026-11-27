@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 
@@ -5,7 +6,7 @@ import { defineConfig, loadEnv } from 'vite'
 export default defineConfig(({ mode }) => {
   // Load only VITE_* variables explicitly (avoids relying on import.meta.env
   // being populated while the config itself is being evaluated).
-  const env = loadEnv(mode, process.cwd(), 'VITE_')
+  const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')
   const apiTarget = env.VITE_API_TARGET || 'http://localhost:4000'
 
   return {

@@ -16,6 +16,9 @@ const MAX_ID_LENGTH = 128;
 // shorter than that queue on a remote database, so waiting requests were
 // failing with P2028. The locks are still short-lived; the larger budget only
 // covers time spent waiting for earlier requests.
+//
+// Progress updates and completion share one lock key: completion reads and
+// writes the same progress row, so the two paths must never interleave.
 const LOCKED_TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
 function requireDb() {
@@ -345,6 +348,12 @@ export async function completeGameSession(rawSessionId) {
   const prisma = getPrisma();
 
   return prisma.$transaction(async (tx) => {
+    // A double click can send several completion requests at once. Serialize
+    // them with the progress lock so only the first one writes the terminal
+    // status; the rest read back the completed session instead of racing on
+    // the same row (which previously timed out with P2028).
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`survivex-progress:${sessionId}`}, 0))::text`;
+
     const session = await tx.gameSession.findUnique({
       where: { id: sessionId },
       include: { progress: true },
@@ -408,5 +417,5 @@ export async function completeGameSession(rawSessionId) {
       visitedZones,
       alreadyCompleted: false,
     };
-  });
+  }, LOCKED_TX_OPTIONS);
 }

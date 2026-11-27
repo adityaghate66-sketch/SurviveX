@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
 // Default (classroom) framing.
@@ -8,6 +8,7 @@ const DEFAULT_LOOK_AT_HEIGHT = 1.2;
 
 // Higher = camera catches up faster. 6 keeps it smooth but responsive.
 const FOLLOW_SPEED = 6;
+const SHAKE_INTENSITY = 0.25;
 
 /**
  * Third-person follow camera.
@@ -15,7 +16,8 @@ const FOLLOW_SPEED = 6;
  * Each frame it works out where the camera *should* be based on the player's
  * position, then eases towards that spot instead of snapping to it. The easing
  * uses `1 - Math.exp(-speed * delta)` so the motion feels the same at 60fps and
- * 144fps.
+ * 144fps. Earthquake shake is added to the target before easing, so the camera
+ * never accumulates a permanent offset from all those random jitters.
  */
 export default function FollowCamera({
   targetRef,
@@ -23,7 +25,6 @@ export default function FollowCamera({
   offset,
   lookAtHeight,
 }) {
-  const { camera } = useThree();
   const desiredPosition = useRef(new THREE.Vector3());
   const lookAtTarget = useRef(new THREE.Vector3());
 
@@ -33,28 +34,21 @@ export default function FollowCamera({
   const camLookAtHeight =
     typeof lookAtHeight === "number" ? lookAtHeight : DEFAULT_LOOK_AT_HEIGHT;
 
-  useFrame((state, delta) => {
+  useFrame(({ camera }, delta) => {
     const target = targetRef.current;
     if (!target) return;
 
+    const shake = disasterState === "earthquake" ? SHAKE_INTENSITY : 0;
     desiredPosition.current.set(
-      target.position.x + camOffset.x,
-      target.position.y + camOffset.y,
-      target.position.z + camOffset.z
+      target.position.x + camOffset.x + (Math.random() - 0.5) * shake,
+      target.position.y + camOffset.y + (Math.random() - 0.5) * shake,
+      target.position.z + camOffset.z + (Math.random() - 0.5) * shake
     );
 
     camera.position.lerp(
       desiredPosition.current,
       1 - Math.exp(-FOLLOW_SPEED * delta)
     );
-
-    // Apply camera shake if earthquake is active
-    if (disasterState === "earthquake") {
-      const shakeIntensity = 0.25;
-      camera.position.x += (Math.random() - 0.5) * shakeIntensity;
-      camera.position.y += (Math.random() - 0.5) * shakeIntensity;
-      camera.position.z += (Math.random() - 0.5) * shakeIntensity;
-    }
 
     lookAtTarget.current.set(
       target.position.x,

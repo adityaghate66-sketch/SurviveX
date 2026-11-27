@@ -1,6 +1,5 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
 
 // 3D progress bar component
 export default function ProgressBar({
@@ -11,8 +10,6 @@ export default function ProgressBar({
   size = { width: 2, height: 0.3 }
 }) {
   const barRef = useRef();
-  const backgroundRef = useRef();
-  const borderRef = useRef();
 
   useFrame(({ clock }) => {
     // Subtle glow on active progress
@@ -35,7 +32,7 @@ export default function ProgressBar({
   return (
     <group position={position}>
       {/* Background */}
-      <mesh ref={backgroundRef}>
+      <mesh>
         <boxGeometry args={[size.width, size.height, 0.05]} />
         <meshStandardMaterial
           color="#1e293b"

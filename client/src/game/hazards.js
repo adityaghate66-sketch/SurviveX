@@ -84,7 +84,10 @@ export class FireHazard {
 export class SmokeParticleSystem {
   constructor({ maxParticles = 500 } = {}) {
     this.maxParticles = maxParticles;
+    // `particles` is the free pool; `activeParticles` holds emitted particles.
+    // Keeping them separate is what lets update() actually see live particles.
     this.particles = [];
+    this.activeParticles = [];
     this.active = false;
     this.sourcePosition = new THREE.Vector3();
 
@@ -126,21 +129,18 @@ export class SmokeParticleSystem {
         THREE.MathUtils.randFloatSpread(0.2)
       );
       particle.opacity = 0.5 + Math.random() * 0.3;
+      this.activeParticles.push(particle);
       emitted.push(particle);
     }
     return emitted;
   }
 
   update(deltaTime) {
-    if (!this.active) return;
+    if (!this.active) return false;
 
     const gravity = -9.8 * deltaTime * 0.5;
-    let activeCount = 0;
 
-    for (const particle of this.particles) {
-      if (!particle.active) continue;
-
-      activeCount++;
+    for (const particle of this.activeParticles) {
       particle.life += deltaTime;
 
       // Update physics
@@ -156,27 +156,30 @@ export class SmokeParticleSystem {
         lifeRatio
       );
 
-      // Reset expired particles
+      // Return expired particles to the pool.
       if (particle.life >= particle.maxLife) {
         particle.active = false;
         particle.opacity = 0;
-        this.particles.push(particle); // Return to pool
+        this.particles.push(particle);
       }
     }
 
-    this.active = activeCount > 0;
-    return activeCount > 0;
+    this.activeParticles = this.activeParticles.filter((p) => p.active);
+    this.active = this.activeParticles.length > 0;
+    return this.active;
   }
 
   getActiveParticles() {
-    return this.particles.filter(p => p.active);
+    return this.activeParticles;
   }
 
   reset() {
-    for (const particle of this.particles) {
+    for (const particle of this.activeParticles) {
       particle.active = false;
       particle.opacity = 0;
+      this.particles.push(particle);
     }
+    this.activeParticles = [];
     this.active = false;
   }
 }

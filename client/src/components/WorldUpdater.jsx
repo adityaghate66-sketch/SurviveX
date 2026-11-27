@@ -16,16 +16,15 @@ export default function WorldUpdater({
     // Check proximity to hazards when playing
     checkProximityToHazards();
 
-    // Handle fire extinguisher interaction (F key)
-    if (activeProp?.id) {
-      if (hazardState.activeHazard && activeProp.id === hazardState.activeHazard.id) {
-        // Player has extinguisher and is near active fire
-        const extinguishResult = hazardState.activeHazard.extinguish(0.5);
-        if (!extinguishResult) {
-          hazardsRegistry.particleSystem.emit(hazardState.activeHazard.position, 5);
-        } else {
-          // Hazard extinguished - will be handled by parent state
-        }
+    // Handle fire extinguisher interaction (F key). The prop id
+    // ("extinguisher-1") and the hazard id ("fire-hallway") are different, so
+    // the check has to be on the prop *type*; proximity was checked above.
+    if (activeProp?.type === "fire-extinguisher" && hazardState.activeHazard) {
+      const extinguishResult = hazardState.activeHazard.extinguish(0.5);
+      if (!extinguishResult) {
+        hazardsRegistry.particleSystem.emit(hazardState.activeHazard.position, 5);
+      } else {
+        // Hazard extinguished - will be handled by parent state
       }
     }
   });

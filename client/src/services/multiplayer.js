@@ -42,7 +42,7 @@ class MultiplayerClient {
       console.log("[Multiplayer] Connecting to", wsUrl);
       this.client = new Client(wsUrl);
       return true;
-    } catch (e) {
+    } catch {
       console.warn("[Multiplayer] @colyseus/sdk not available, using local mode");
       return false;
     }

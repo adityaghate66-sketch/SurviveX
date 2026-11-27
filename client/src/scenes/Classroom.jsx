@@ -1,67 +1,8 @@
-import { DESKS, ROOM, TEACHER_DESK, EMERGENCY_PROPS } from "./classroomLayout.js";
-import { useEffect, useState } from "react";
+import { ROOM, TEACHER_DESK, EMERGENCY_PROPS } from "./classroomLayout.js";
+import { useState } from "react";
 import * as THREE from "three";
 import { hazardsRegistry } from "../game/hazards.js";
 import { SmokeCloud } from "../components/ParticleSystem.jsx";
-
-// Tabletop sits at y = 1.05 with 0.14 thickness, so the legs run from the floor
-// (0) up to 0.98 — flush under the tabletop instead of poking through it.
-const TABLETOP_Y = 1.05;
-const TABLETOP_THICKNESS = 0.14;
-const LEG_HEIGHT = TABLETOP_Y - TABLETOP_THICKNESS / 2;
-const LEG_Y = LEG_HEIGHT / 2;
-
-function Desk({ position }) {
-  return (
-    <group position={position}>
-      {/* Tabletop */}
-      <mesh position={[0, TABLETOP_Y, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.8, TABLETOP_THICKNESS, 0.9]} />
-        <meshStandardMaterial color="#B98250" roughness={0.75} />
-      </mesh>
-
-      {/* Four legs */}
-      {[-0.72, 0.72].map((x) =>
-        [-0.32, 0.32].map((z) => (
-          <mesh
-            key={`${x}-${z}`}
-            position={[x, LEG_Y, z]}
-            castShadow
-          >
-            <boxGeometry args={[0.09, LEG_HEIGHT, 0.09]} />
-            <meshStandardMaterial color="#505B68" />
-          </mesh>
-        ))
-      )}
-
-      {/* Chair seat */}
-      <mesh position={[0, 0.55, 0.95]} castShadow receiveShadow>
-        <boxGeometry args={[0.75, 0.12, 0.7]} />
-        <meshStandardMaterial color="#3977A8" />
-      </mesh>
-
-      {/* Chair backrest */}
-      <mesh position={[0, 1, 1.25]} castShadow>
-        <boxGeometry args={[0.75, 0.85, 0.12]} />
-        <meshStandardMaterial color="#3977A8" />
-      </mesh>
-
-      {/* Chair legs */}
-      {[-0.28, 0.28].map((x) =>
-        [0.7, 1.2].map((z) => (
-          <mesh
-            key={`${x}-${z}`}
-            position={[x, 0.27, z]}
-            castShadow
-          >
-            <boxGeometry args={[0.07, 0.5, 0.07]} />
-            <meshStandardMaterial color="#505B68" />
-          </mesh>
-        ))
-      )}
-    </group>
-  );
-}
 
 function Window({ position }) {
   return (
@@ -91,25 +32,24 @@ function Window({ position }) {
 export default function Classroom({ activeProp = null } = {}) {
   const halfWidth = ROOM.width / 2;
   const halfDepth = ROOM.depth / 2;
-  const [fireHazard, setFireHazard] = useState(null);
+  // The registry is the source of truth. Initializing lazily avoids a state
+  // update in an effect and keeps StrictMode's double render from adding a
+  // second fire with the same id.
+  const [fireHazard] = useState(() => {
+    const extinguisher = EMERGENCY_PROPS.find(
+      (prop) => prop.type === "fire-extinguisher"
+    );
+    if (!extinguisher) return null;
 
-  // Initialize fire hazard when component mounts
-  useEffect(() => {
-    // Create fire hazard in hallway area
-    const extinguisher = EMERGENCY_PROPS.find(prop => prop.type === "fire-extinguisher");
-    if (extinguisher && !hazardsRegistry.getHazard("fire-hallway")) {
-      const position = new THREE.Vector3(
-        extinguisher.position[0],
-        extinguisher.position[1],
-        extinguisher.position[2]
-      );
-      const hazard = hazardsRegistry.addHazard("fire-hallway", position, {
-        maxSpreadZones: 2,
-        baseIntensity: 0.8
-      });
-      setFireHazard(hazard);
-    }
-  }, []);
+    return (
+      hazardsRegistry.getHazard("fire-hallway") ??
+      hazardsRegistry.addHazard(
+        "fire-hallway",
+        new THREE.Vector3(...extinguisher.position),
+        { maxSpreadZones: 2, baseIntensity: 0.8 }
+      )
+    );
+  });
 
   return (
     <>

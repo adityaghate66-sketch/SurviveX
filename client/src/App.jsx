@@ -92,26 +92,6 @@ function getPlayerName() {
   }
 }
 
-// Unique player ID for multiplayer - stored per-tab so each browser tab
-// gets its own identity even when sharing localStorage with other tabs.
-function getPlayerId() {
-  try {
-    const stored = window.sessionStorage.getItem("survivex.playerId");
-    if (stored) return stored;
-
-    const random =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID().replace(/-/g, "")
-        : Math.random().toString(36).slice(2, 16);
-
-    const generated = `p-${random}`;
-    window.sessionStorage.setItem("survivex.playerId", generated);
-    return generated;
-  } catch {
-    return "p-guest";
-  }
-}
-
 // Only the session id and its mission are persisted. Progress is never stored
 // locally as the source of truth: it is always re-read from the API so the
 // database stays authoritative.
@@ -171,6 +151,10 @@ export default function App() {
   // starts straight at the Start Mission button.
   const [phase, setPhase] = useState(() => (readStoredSession() ? "restoring" : "idle"));
   const [sessionError, setSessionError] = useState(null);
+
+  // Confirmed by the API. Keeping it in state means effects (multiplayer join,
+  // pending-zone retry) automatically re-run when a session is restored/started.
+  const [sessionId, setSessionId] = useState(null);
 
   // Phase 2A: Disaster state (none | earthquake | aftermath)
   const [disasterState, setDisasterState] = useState("none");
@@ -236,14 +220,14 @@ export default function App() {
   // Join the Colyseus room once a session is confirmed. The game stays fully
   // playable in local mode if the multiplayer server is unavailable.
   useEffect(() => {
-    if (phase !== "playing") return undefined;
+    if (phase !== "playing" || !sessionId) return undefined;
 
     let cancelled = false;
     (async () => {
       const initialized = await multiplayerClient.initialize();
       if (!initialized || cancelled) return;
 
-      const room = await multiplayerClient.joinRoom(sessionIdRef.current, {
+      const room = await multiplayerClient.joinRoom(sessionId, {
         name: getPlayerName(),
         spawnX: PLAYER_SPAWN[0],
         spawnZ: PLAYER_SPAWN[2],
@@ -260,7 +244,7 @@ export default function App() {
       cancelled = true;
       multiplayerClient.leave();
     };
-  }, [phase]);
+  }, [phase, sessionId]);
 
   // Set up multiplayer state change listener
   const handleMultiplayerState = useCallback((state) => {
@@ -302,11 +286,9 @@ export default function App() {
     };
   }, [handleMultiplayerState]);
 
-  // Persistence plumbing. Refs keep async callbacks from depending on state
-  // that may change while a request is in flight.
+  // Persistence plumbing. Refs guard one-shot startup/flush work; the session
+  // id itself lives in state so effects can react to restore/start.
   const restoredRef = useRef(false);
-  const sessionIdRef = useRef(null);
-  const sessionKeyRef = useRef(null);
   const startingRef = useRef(false);
   const pendingZonesRef = useRef(new Set());
   const flushingRef = useRef(false);
@@ -369,21 +351,21 @@ export default function App() {
     setVisitedZones((current) => mergeVisitedZones(current, data.visitedZones));
   }, []);
 
-  const markMissionComplete = useCallback(async () => {
-    const sessionId = sessionIdRef.current;
-    if (!sessionId) return;
-    await completeSession(sessionId);
+  // The id is passed in explicitly so async restore/start flows can complete
+  // against the session they just confirmed, before React commits the state.
+  const markMissionComplete = useCallback(async (id) => {
+    if (!id) return;
+    await completeSession(id);
   }, []);
 
   const persistZone = useCallback(
-    async (zoneId) => {
-      const sessionId = sessionIdRef.current;
-      if (!sessionId) {
+    async (zoneId, id = sessionId) => {
+      if (!id) {
         pendingZonesRef.current.add(zoneId);
         return;
       }
 
-      const res = await updateSessionProgress(sessionId, zoneId);
+      const res = await updateSessionProgress(id, zoneId);
       if (!res.ok) {
         // Backend temporarily unavailable: remember the zone and retry later.
         pendingZonesRef.current.add(zoneId);
@@ -392,27 +374,30 @@ export default function App() {
 
       const data = res.data?.data;
       applyServerProgress(data);
-      if (data?.completed) await markMissionComplete();
+      if (data?.completed) await markMissionComplete(id);
     },
-    [applyServerProgress, markMissionComplete]
+    [applyServerProgress, markMissionComplete, sessionId]
   );
 
   // Send any discoveries that failed while the backend was offline.
-  const flushPendingZones = useCallback(async () => {
-    if (!sessionIdRef.current || pendingZonesRef.current.size === 0) return;
-    if (flushingRef.current) return;
+  const flushPendingZones = useCallback(
+    async (id = sessionId) => {
+      if (!id || pendingZonesRef.current.size === 0) return;
+      if (flushingRef.current) return;
 
-    flushingRef.current = true;
-    try {
-      const zones = [...pendingZonesRef.current];
-      pendingZonesRef.current.clear();
-      for (const zoneId of zones) {
-        await persistZone(zoneId);
+      flushingRef.current = true;
+      try {
+        const zones = [...pendingZonesRef.current];
+        pendingZonesRef.current.clear();
+        for (const zoneId of zones) {
+          await persistZone(zoneId, id);
+        }
+      } finally {
+        flushingRef.current = false;
       }
-    } finally {
-      flushingRef.current = false;
-    }
-  }, [persistZone]);
+    },
+    [persistZone, sessionId]
+  );
 
   // Restore the session this browser used last time. GET is deliberately the
   // source of truth: if the session was deleted or no longer belongs to this
@@ -430,14 +415,13 @@ export default function App() {
 
       if (res.ok && res.data?.success) {
         const data = res.data.data;
-        sessionIdRef.current = data.sessionId;
-        sessionKeyRef.current = missionCode;
+        setSessionId(data.sessionId);
         applyServerProgress(data);
         setSessionError(null);
         setPhase("playing");
 
         if ((data.progress ?? 0) >= 100 && data.status !== "COMPLETED") {
-          await markMissionComplete();
+          await markMissionComplete(data.sessionId);
         }
         return;
       }
@@ -484,16 +468,15 @@ export default function App() {
         return;
       }
 
-      sessionIdRef.current = data.sessionId;
-      sessionKeyRef.current = missionCode;
+      setSessionId(data.sessionId);
       writeStoredSession(data.sessionId, missionCode);
       applyServerProgress(data);
       setPhase("playing");
 
-      await flushPendingZones();
+      await flushPendingZones(data.sessionId);
 
       if ((data.progress ?? 0) >= 100 && data.status !== "COMPLETED") {
-        await markMissionComplete();
+        await markMissionComplete(data.sessionId);
       }
     } finally {
       startingRef.current = false;
@@ -516,13 +499,13 @@ export default function App() {
   // created from a timer: that only happens on an explicit Start Mission click.
   useEffect(() => {
     const timer = setInterval(() => {
-      if (sessionIdRef.current && pendingZonesRef.current.size > 0) {
-        flushPendingZones();
+      if (sessionId && pendingZonesRef.current.size > 0) {
+        flushPendingZones(sessionId);
       }
     }, PENDING_RETRY_MS);
 
     return () => clearInterval(timer);
-  }, [flushPendingZones]);
+  }, [flushPendingZones, sessionId]);
 
   // Called once each time the player enters a zone (ZoneDetector handles the
   // per-frame "am I still inside?" part). The visited list makes it idempotent:
