@@ -46,6 +46,13 @@ if (!Number.isInteger(bcryptRounds) || bcryptRounds < 8 || bcryptRounds > 15) {
   throw new Error(`Invalid BCRYPT_ROUNDS environment variable: "${rawBcryptRounds}"`);
 }
 
+// jsonwebtoken accepts ms-style durations; keep the production value from
+// failing at the first login attempt by checking it once at boot.
+const jwtExpiresIn = process.env.JWT_EXPIRES_IN?.trim() || "7d";
+if (!/^\d+(ms|s|m|h|d|w|y)?$/.test(jwtExpiresIn)) {
+  throw new Error(`Invalid JWT_EXPIRES_IN environment variable: "${jwtExpiresIn}"`);
+}
+
 export const config = Object.freeze({
   nodeEnv,
   isProduction,
@@ -53,6 +60,6 @@ export const config = Object.freeze({
   corsOrigins,
   databaseUrl,
   jwtSecret: jwtSecret || "survivex-development-only-secret",
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || "7d",
+  jwtExpiresIn,
   bcryptRounds,
 });

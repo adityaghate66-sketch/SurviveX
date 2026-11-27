@@ -83,10 +83,10 @@ function presentSession(session) {
 /**
  * POST /api/sessions
  *
- * Finds the player's ACTIVE session for this mission or creates one. Accepts
- * either a verified token (preferred) or a real `userId` / stable `username`
- * (the browser's guest identity), and locates the mission by `missionId` or
- * `missionCode` / `code`.
+ * Finds the player's ACTIVE session for this mission or creates one. A verified
+ * token is the only way to target a real `userId`. Without one, callers may use
+ * only the stable `username` guest identity, so a crafted request cannot claim
+ * another player's account.
  */
 export async function createOrGetSession(rawPayload, authenticatedUserId = null) {
   requireDb();
@@ -98,7 +98,20 @@ export async function createOrGetSession(rawPayload, authenticatedUserId = null)
     typeof authenticatedUserId === "string" && authenticatedUserId
       ? authenticatedUserId
       : null;
-  const providedUserId = verifiedUserId || asText(payload.userId);
+  const bodyUserId = asText(payload.userId);
+
+  if (!verifiedUserId && bodyUserId) {
+    throw new AppError(
+      "Authentication is required to start a session for a specific player.",
+      {
+        statusCode: 401,
+        code: "UNAUTHORIZED",
+        details: { field: "userId" },
+      }
+    );
+  }
+
+  const providedUserId = verifiedUserId || bodyUserId;
   const providedUsername = asText(payload.username);
   const missionId = asText(payload.missionId);
   const missionCode = asText(payload.missionCode ?? payload.code);
@@ -130,9 +143,9 @@ export async function createOrGetSession(rawPayload, authenticatedUserId = null)
     );
   }
 
-  // Resolve the player. A caller with an existing user ID is trusted only
-  // after the row is confirmed; otherwise a username is resolved inside the
-  // transaction below, which also covers local play without a login flow.
+  // Resolve the player. Only a verified token can supply an existing user ID;
+  // otherwise a username is resolved inside the transaction below, which
+  // covers local play without a login flow.
   let knownUserId = null;
   let username = null;
 

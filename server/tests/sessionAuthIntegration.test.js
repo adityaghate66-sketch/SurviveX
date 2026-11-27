@@ -126,6 +126,23 @@ test("a verified token overrides a client-supplied userId", async () => {
   assert.equal(created.body.data.authenticated, true);
 });
 
+test("an unauthenticated userId cannot claim another player's session", async () => {
+  const victim = await createPlayer("victim");
+
+  const attack = await startSession({
+    userId: victim.player.id,
+    username: username("attacker"),
+  });
+
+  assert.equal(attack.status, 401);
+  assert.equal(attack.body.error.code, "UNAUTHORIZED");
+
+  const victimSessions = await getPrisma().gameSession.count({
+    where: { userId: victim.player.id },
+  });
+  assert.equal(victimSessions, 0);
+});
+
 test("no token keeps the guest path unchanged", async () => {
   const created = await startSession({ username: username("guest") });
   assert.equal(created.status, 201);
