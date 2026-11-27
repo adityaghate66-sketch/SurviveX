@@ -23,7 +23,7 @@ matchMaker.controller.getCorsHeaders = (headers) => {
     return {
       "Access-Control-Allow-Origin": origin || "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
   }
   // Production: use the configured CORS origins from the Express app
@@ -32,13 +32,13 @@ matchMaker.controller.getCorsHeaders = (headers) => {
     return {
       "Access-Control-Allow-Origin": "null",
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
   }
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 };
 

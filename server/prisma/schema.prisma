@@ -33,11 +33,24 @@ enum SessionStatus {
 }
 
 model User {
-  id        String        @id @default(cuid())
-  username  String        @unique
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  sessions  GameSession[]
+  id           String        @id @default(cuid())
+  username     String        @unique
+  // Nullable so existing guest sessions (created from a browser username)
+  // keep working without a password. Registered players have both fields.
+  email        String?       @unique
+  passwordHash String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     GameSession[]
+}
+
+// Logout revokes a JWT by its id until the token would have expired anyway.
+model RevokedToken {
+  jti       String   @id
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 model Mission {

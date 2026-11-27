@@ -13,6 +13,7 @@ if (!Number.isInteger(port) || port <= 0 || port > 65535) {
 }
 
 const nodeEnv = process.env.NODE_ENV ?? "development";
+const isProduction = nodeEnv === "production";
 
 // CORS_ORIGIN can hold several origins separated by commas, which is handy
 // when you add a deployed frontend later.
@@ -32,10 +33,26 @@ const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
 // a clear message instead.
 const databaseUrl = process.env.DATABASE_URL?.trim() || undefined;
 
+// Auth tokens must never be signed with a known key in production. Local dev
+// and the test suite use a fixed fallback so they run without extra setup.
+const jwtSecret = process.env.JWT_SECRET?.trim();
+if (isProduction && !jwtSecret) {
+  throw new Error("JWT_SECRET must be set when NODE_ENV=production.");
+}
+
+const rawBcryptRounds = process.env.BCRYPT_ROUNDS ?? "12";
+const bcryptRounds = Number(rawBcryptRounds);
+if (!Number.isInteger(bcryptRounds) || bcryptRounds < 8 || bcryptRounds > 15) {
+  throw new Error(`Invalid BCRYPT_ROUNDS environment variable: "${rawBcryptRounds}"`);
+}
+
 export const config = Object.freeze({
   nodeEnv,
-  isProduction: nodeEnv === "production",
+  isProduction,
   port,
   corsOrigins,
   databaseUrl,
+  jwtSecret: jwtSecret || "survivex-development-only-secret",
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN?.trim() || "7d",
+  bcryptRounds,
 });
