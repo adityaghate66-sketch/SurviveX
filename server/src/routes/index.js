@@ -2,6 +2,7 @@ import { Router } from "express";
 import authRoutes from "./authRoutes.js";
 import healthRoutes from "./healthRoutes.js";
 import missionRoutes from "./missionRoutes.js";
+import playerRoutes from "./playerRoutes.js";
 import sessionRoutes from "./sessionRoutes.js";
 
 // Every API router is mounted here, which keeps app.js free of route details.
@@ -10,6 +11,7 @@ const router = Router();
 router.use("/auth", authRoutes);
 router.use("/health", healthRoutes);
 router.use("/missions", missionRoutes);
+router.use("/player", playerRoutes);
 router.use("/sessions", sessionRoutes);
 
 export default router;

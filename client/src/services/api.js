@@ -9,14 +9,16 @@ const REQUEST_TIMEOUT_MS = 12000;
 async function request(path, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const { headers, token, ...rest } = options;
 
   try {
     const res = await fetch(`${API_BASE}${path}`, {
+      ...rest,
       headers: {
         'Content-Type': 'application/json',
-        ...(options.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(headers || {}),
       },
-      ...options,
       signal: controller.signal,
     });
 
@@ -67,4 +69,51 @@ export async function completeSession(sessionId) {
   return request(`/sessions/${encodeURIComponent(sessionId)}/complete`, {
     method: 'POST',
   });
+}
+
+// --- Authentication -------------------------------------------------------
+// The site pages want plain values and thrown errors; the game uses `request`
+// directly and keeps its existing { ok, status, data } contract untouched.
+
+function unwrap(result) {
+  if (!result.ok) {
+    const message =
+      result.data?.error?.message || result.error || 'The request failed.';
+    const error = new Error(message);
+    error.code = result.data?.error?.code;
+    error.status = result.status;
+    throw error;
+  }
+  return result.data?.data;
+}
+
+export async function registerPlayer(payload) {
+  return unwrap(
+    await request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  );
+}
+
+export async function loginPlayer(payload) {
+  return unwrap(
+    await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  );
+}
+
+export async function logoutPlayer(token) {
+  return unwrap(await request('/auth/logout', { method: 'POST', token }));
+}
+
+export async function getMe(token) {
+  return unwrap(await request('/auth/me', { token }));
+}
+
+// Dashboard aggregates come from the server, derived from real session rows.
+export async function getPlayerSummary(token) {
+  return unwrap(await request('/player/summary', { token }));
 }
