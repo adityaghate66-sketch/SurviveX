@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import App from './App.jsx';
+import GameEntryGate from './site/GameEntryGate.jsx';
 import AuthProvider from './site/context/AuthProvider.jsx';
 import SiteLayout from './site/SiteLayout.jsx';
 import RequireAuth from './site/RequireAuth.jsx';
@@ -12,14 +12,15 @@ import ProfilePage from './site/pages/ProfilePage.jsx';
 import SettingsPage from './site/pages/SettingsPage.jsx';
 import './site/site.css';
 
-// `/` must keep booting the existing game exactly as before. The public site
-// lives on its own paths and is the only place that mounts the auth provider,
-// so a game load never makes an unnecessary /auth/me request.
+// `/` still boots the existing game, but only after its welcome entry gate is
+// dismissed. The public site lives on its own paths and is the only place that
+// mounts the auth provider, so a game load never makes an unnecessary /auth/me
+// request.
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route path="/" element={<GameEntryGate />} />
 
         <Route
           element={

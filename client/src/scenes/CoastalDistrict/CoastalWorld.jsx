@@ -13,6 +13,7 @@ import Ocean from "./Ocean.jsx";
 import Roads from "./Roads.jsx";
 import ResidentialArea from "./ResidentialArea.jsx";
 import Beachfront from "./Beachfront.jsx";
+import FireHazard from "./FireHazard.jsx";
 import { WALKABLE_BOUNDS } from "./coastalBounds.js";
 
 const SUN_POSITION = [220, 340, 160];
@@ -114,6 +115,16 @@ export default function CoastalWorld({
         <Roads />
         <Beachfront />
         <ResidentialArea />
+        <FireHazard
+          id="coastal-beachfire"
+          position={[200, 0.5, -200]}
+          intensity={0.7}
+        />
+        <FireHazard
+          id="coastal-harbourfire"
+          position={[-150, 0.5, -100]}
+          intensity={0.5}
+        />
 
         {showBounds && <WalkableBounds />}
         {debugStats && <SceneStats />}
