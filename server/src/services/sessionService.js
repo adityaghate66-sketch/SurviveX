@@ -84,14 +84,21 @@ function presentSession(session) {
  * POST /api/sessions
  *
  * Finds the player's ACTIVE session for this mission or creates one. Accepts
- * either a real `userId` or a stable `username` (the browser generates one),
- * and locates the mission by `missionId` or `missionCode` / `code`.
+ * either a verified token (preferred) or a real `userId` / stable `username`
+ * (the browser's guest identity), and locates the mission by `missionId` or
+ * `missionCode` / `code`.
  */
-export async function createOrGetSession(rawPayload) {
+export async function createOrGetSession(rawPayload, authenticatedUserId = null) {
   requireDb();
   const payload = asObject(rawPayload);
 
-  const providedUserId = asText(payload.userId);
+  // A verified token always wins over a client-supplied userId, so a player
+  // cannot attach a session to somebody else's account.
+  const verifiedUserId =
+    typeof authenticatedUserId === "string" && authenticatedUserId
+      ? authenticatedUserId
+      : null;
+  const providedUserId = verifiedUserId || asText(payload.userId);
   const providedUsername = asText(payload.username);
   const missionId = asText(payload.missionId);
   const missionCode = asText(payload.missionCode ?? payload.code);
@@ -210,6 +217,10 @@ export async function createOrGetSession(rawPayload) {
 
   return {
     ...presentSession(result.session),
+    // The client stores this so it can spot a session owned by a different
+    // identity (signed in vs guest, or a different account).
+    userId: result.session.userId,
+    authenticated: Boolean(verifiedUserId),
     reused: result.reused,
   };
 }

@@ -125,7 +125,7 @@ Validation is hand-written inside services (username regex `^[A-Za-z0-9_-]{3,32}
 ### CORS / transport caveats
 
 - Express CORS: exact-origin allowlist from `CORS_ORIGIN`; methods `GET, POST, PUT, PATCH, OPTIONS`; **no `credentials: true`**, no `DELETE`.
-- Colyseus installs a global CORS hook in `server.js:14-43` on the shared HTTP server. It accepts local/private origins unconditionally and allows only the `Content-Type` request header — an `Authorization` header or cookie preflight will need changes in **both** places.
+- Colyseus installs a global CORS hook in `server.js:14-43` on the shared HTTP server. It accepts local/private origins unconditionally. As of Milestone 2 it allows both `Content-Type` and `Authorization` in all three branches; cookies would still need coordinated changes in both places.
 - `/colyseus` monitor is mounted after `notFoundHandler`/`errorHandler`, so it is currently shadowed by the 404 handler. Do not reorder without gating it by environment.
 - Prisma advisory locks (`survivex-user:*`, `survivex-session:*`, `survivex-progress:*`) serialize duplicate session creation, zone updates and completion. Keep these patterns; extend, do not replace.
 
@@ -149,7 +149,7 @@ Decisions to take into Milestone 2 (needs your approval before implementation):
 ## 6. Risks / open issues found during inspection
 
 - Nothing in the current API identifies the caller, so session endpoints are effectively public to anyone with a session id.
-- Colyseus CORS allows only `Content-Type`; adding an auth header needs coordinated frontend/backend changes.
+- Colyseus CORS allows `Authorization` (updated in Milestone 2); no further header change was needed for bearer tokens, and no cookies are used.
 - No `helmet`, rate limiting, CSRF or cookie parser; login endpoints will need at least basic rate limiting consideration.
 - Migration drift and `DIRECT_URL` documentation gap (see §4).
 - Frontend has no router and no form/UI primitives; the website must be added without disturbing the canvas contract.

@@ -10,7 +10,8 @@ import {
 //   failure -> handled centrally by errorHandler: { success: false, error }
 
 export async function createSession(req, res) {
-  const session = await createOrGetSession(req.body);
+  // req.user is set only when optionalAuth verified a bearer token.
+  const session = await createOrGetSession(req.body, req.user?.id);
   const statusCode = session.reused ? 200 : 201;
   res.status(statusCode).json({ success: true, data: session });
 }

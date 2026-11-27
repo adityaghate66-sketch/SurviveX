@@ -32,6 +32,7 @@ import {
   updateSessionProgress,
 } from "./services/api.js";
 import { multiplayerClient } from "./services/multiplayer.js";
+import { clearSession, readSession } from "./site/services/authStorage.js";
 import "./App.css";
 
 const DEFAULT_MISSION = {
@@ -114,9 +115,17 @@ function readStoredSession() {
   }
 }
 
-function writeStoredSession(sessionId, missionCode) {
+function writeStoredSession(sessionId, missionCode, owner) {
   try {
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify({ sessionId, missionCode }));
+    window.sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({
+        sessionId,
+        missionCode,
+        ownerId: owner?.userId ?? null,
+        authenticated: Boolean(owner?.authenticated),
+      })
+    );
   } catch {
     // Private mode / quota: the session still works for this page view.
   }
@@ -128,6 +137,25 @@ function clearStoredSession() {
   } catch {
     // Nothing to clean up if storage is unavailable.
   }
+}
+
+// The game route has no AuthProvider, so it reads the same token the site
+// wrote. Only a stored safe player id is used — never a password or hash.
+function currentAuthIdentity() {
+  const auth = readSession();
+  return auth?.player?.id ? { token: auth.token, playerId: auth.player.id } : null;
+}
+
+// A saved session must not be resumed after signing in, signing out, or
+// switching accounts. Ownership comes from the server's response, not from a
+// guess in the browser.
+function storedSessionMatchesIdentity(stored) {
+  const identity = currentAuthIdentity();
+
+  if (!stored.authenticated && !identity) return true; // legacy guest record
+  if (!stored.authenticated && identity) return false; // signed in since save
+  if (stored.authenticated && !identity) return false; // signed out since save
+  return stored.ownerId === identity.playerId;
 }
 
 export default function App() {
@@ -411,6 +439,12 @@ export default function App() {
         return;
       }
 
+      if (!storedSessionMatchesIdentity(stored)) {
+        clearStoredSession();
+        setPhase("idle");
+        return;
+      }
+
       const res = await getSessionProgress(stored.sessionId);
 
       if (res.ok && res.data?.success) {
@@ -456,9 +490,11 @@ export default function App() {
     setPhase("starting");
 
     try {
+      const identity = currentAuthIdentity();
       const res = await createSession({
         username: getPlayerName(),
         missionCode,
+        token: identity?.token,
       });
 
       const data = res.ok ? res.data?.data : null;
@@ -468,8 +504,16 @@ export default function App() {
         return;
       }
 
+      // The server is authoritative about identity. If it ignored our token it
+      // was expired/revoked, so drop it instead of repeatedly claiming an
+      // account that no longer authenticates.
+      if (identity && data.authenticated === false) clearSession();
+
       setSessionId(data.sessionId);
-      writeStoredSession(data.sessionId, missionCode);
+      writeStoredSession(data.sessionId, missionCode, {
+        userId: data.userId,
+        authenticated: data.authenticated,
+      });
       applyServerProgress(data);
       setPhase("playing");
 

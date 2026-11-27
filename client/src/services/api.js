@@ -45,9 +45,12 @@ export async function getMissions() {
 
 // Creates a game session, or returns the player's existing active session for
 // the same mission. Safe to call more than once (React StrictMode does).
-export async function createSession({ userId, username, missionId, missionCode } = {}) {
+export async function createSession({ userId, username, missionId, missionCode, token } = {}) {
   return request('/sessions', {
     method: 'POST',
+    // When present, the server verifies this token and uses the signed-in
+    // player. Without it the existing guest path is unchanged.
+    token,
     body: JSON.stringify({ userId, username, missionId, missionCode }),
   });
 }
